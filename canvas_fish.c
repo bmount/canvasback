@@ -23,10 +23,10 @@ here: http://portal.opengeospatial.org/files/?artifact_id=829
 
 #define base_geo_query "select aswkb(geom) from tract00 where MBRContains(GeomFromText('LINESTRING(%f %f, %f %f)'), geom);";
 
-#define DB_NAME "soans"
-#define DB_PORT "localhost"
-#define DB_USER "bvm"
-#define DB_PASSWORD "vincent"
+#define DB_NAME "" /* add db info etc */
+#define DB_PORT ""
+#define DB_USER ""
+#define DB_PASSWORD ""
 
 #define lonf 0.01132221938
 #define latf 0.0090215040
