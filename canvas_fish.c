@@ -24,7 +24,7 @@ here: http://portal.opengeospatial.org/files/?artifact_id=829
 #define base_geo_query "select aswkb(geom) from tract00 where MBRContains(GeomFromText('LINESTRING(%f %f, %f %f)'), geom);";
 
 #define DB_NAME "" /* add db info etc */
-#define DB_PORT ""
+#define DB_HOST ""
 #define DB_USER ""
 #define DB_PASSWORD ""
 
@@ -126,7 +126,7 @@ int canvas_fish (char* cf_geo_query, double clon, double clat, double dist, int 
     MYSQL_RES *geoms;
     MYSQL_ROW geometry;
     conn = mysql_init(NULL);
-    mysql_real_connect(conn, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, 0, NULL, 0);
+    mysql_real_connect(conn, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, 0, NULL, 0);
     char *geo_query = cf_geo_query;
     char fmtq[500];
     sprintf(fmtq, geo_query, gm->minlon, gm->minlat, gm->maxlon, gm->maxlat);
