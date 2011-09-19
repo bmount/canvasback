@@ -10,6 +10,8 @@ Street Map data, and an accompanying js example that includes the transforms
 necessary to work with its default mercator. There is also a MySQL version that 
 works directly on the WKB layer, and expects Lon and Lat (it's kind of a demo.)
 
+![undercanvass example](rendered_map_examples/All_San_Francisco_and_Southern_Marin%20Streets_unsimplified.png)
+
 ![undercanvass example](http://www.flickr.com/photos/79112603@N00/6162012886/)
 ![undercanvass example](http://www.flickr.com/photos/79112603@N00/6162015676/)
 ![undercanvass example](http://www.flickr.com/photos/79112603@N00/5911967324/)
