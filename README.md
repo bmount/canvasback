@@ -11,15 +11,14 @@ necessary to work with its default mercator. There is also a MySQL version that
 works directly on the WKB layer, and expects Lon and Lat (it's kind of a demo.)
 
 
-![undercanvass example](undercanvas/raw/master/rendered_map_examples/All_San_Francisco_and_Southern_Marin%20Streets_unsimplified.png)
+![undercanvass
+example](undercanvass/raw/master/rendered_map_examples/sf_marin_complex.png)
 
 ![undercanvas example](undercanvass/raw/master/rendered_map_examples/Bay_Bridge_simplified.png)
-![undercanvass example](http://www.flickr.com/photos/79112603@N00/6162012886/)
-![undercanvass example](http://www.flickr.com/photos/79112603@N00/6162015676/)
-![undercanvass example](http://www.flickr.com/photos/79112603@N00/5911967324/)
 ![undercanvass
-example](http://www.flickr.com/photos/79112603@N00/5911407731/in/set-72157627137460950)
-![undercanvass example](http://www.flickr.com/photos/79112603@N00/6162015694/)
+example](undercanvass/raw/master/rendered_map_examples/Nor_Cal_railways.png)
+![undercanvass
+example](undercanvass/raw/master/rendered_map_examples/SF_all_roads.png)
 
 A good source of bulk partial Open Street Map data is [Cloudmade](http://downloads.cloudmade.com/).
 `osm2pgsql` with default flags (mercator projection, etc.) is what I'm calling
