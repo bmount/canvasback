@@ -1,4 +1,4 @@
-`undercanvass` is inspired by the work of [Cartagen](http://cartagen.org) and 
+`canvasback` is inspired by the work of [Cartagen](http://cartagen.org) and 
 [Eric Fischer](http://www.flickr.com/photos/walkingsf/). The goal is to create
 a fast json endpoint for simple 2d mapping in html5 canvas elements, minimal 
 enough to enable scrolling and zooming without pre-rendering images. Most of 
@@ -10,15 +10,20 @@ Street Map data, and an accompanying js example that includes the transforms
 necessary to work with its default mercator. There is also a MySQL version that 
 works directly on the WKB layer, and expects Lon and Lat (it's kind of a demo.)
 
-
-![undercanvass
-example](undercanvass/raw/master/rendered_map_examples/sf_marin_complex.png)
-
-![undercanvas example](undercanvass/raw/master/rendered_map_examples/Bay_Bridge_simplified.png)
-![undercanvass
-example](undercanvass/raw/master/rendered_map_examples/Nor_Cal_railways.png)
-![undercanvass
-example](undercanvass/raw/master/rendered_map_examples/SF_all_roads.png)
+**the idea**
+Complex Bay Area road geometries on a simplified background:
+![canvasback
+example](canvasback/raw/master/rendered_map_examples/sf_marin_complex.png)
+The area around the SF Bay Bridge showing important roads simplified:
+![canvasback example](canvasback/raw/master/rendered_map_examples/Bay_Bridge_simplified.png)
+Northern California's railways over a political subdivision map:
+![canvasback
+example](canvasback/raw/master/rendered_map_examples/Nor_Cal_railways.png)
+All SF roads over a detailed polygon background:
+![canvasback
+example](canvasback/raw/master/rendered_map_examples/SF_all_roads.png)
+Female canvasback duck with ducklings:
+![canvasback example](canvasback/raw/master/rendered_map_examples/Aythya_valisineria2.jpg)
 
 A good source of bulk partial Open Street Map data is [Cloudmade](http://downloads.cloudmade.com/).
 `osm2pgsql` with default flags (mercator projection, etc.) is what I'm calling
