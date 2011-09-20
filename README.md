@@ -10,19 +10,28 @@ Street Map data, and an accompanying js example that includes the transforms
 necessary to work with its default mercator. There is also a MySQL version that 
 works directly on the WKB layer, and expects Lon and Lat (it's kind of a demo.)
 
-**the idea**
+***sample output***
+
 Complex Bay Area road geometries on a simplified background:
+
 ![canvasback
 example](canvasback/raw/master/rendered_map_examples/sf_marin_complex.png)
+
 The area around the SF Bay Bridge showing important roads simplified:
+
 ![canvasback example](canvasback/raw/master/rendered_map_examples/Bay_Bridge_simplified.png)
+
 Northern California's railways over a political subdivision map:
+
 ![canvasback
 example](canvasback/raw/master/rendered_map_examples/Nor_Cal_railways.png)
+
 All SF roads over a detailed polygon background:
 ![canvasback
 example](canvasback/raw/master/rendered_map_examples/SF_all_roads.png)
+
 Female canvasback duck with ducklings:
+
 ![canvasback example](canvasback/raw/master/rendered_map_examples/Aythya_valisineria2.jpg)
 
 A good source of bulk partial Open Street Map data is [Cloudmade](http://downloads.cloudmade.com/).
