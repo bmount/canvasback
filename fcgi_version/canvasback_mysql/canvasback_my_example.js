@@ -1,4 +1,4 @@
-canvas_fish = new Object();
+canvas_fish = {};
 
 canvas_fish.randcol = function () {
     var randcolor = '#'+(Math.random()*0xFFFFFF<<0).toString(16);
