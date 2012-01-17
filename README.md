@@ -1,14 +1,28 @@
 `canvasback` is inspired by the work of [Cartagen](http://cartagen.org) and 
 [Eric Fischer](http://www.flickr.com/photos/walkingsf/). The goal is to create
-a fast json endpoint for simple 2d mapping in html5 canvas elements, minimal 
+a fast json endpoint for simple 2d mapping in html5 elements, minimal 
 enough to enable scrolling and zooming without pre-rendering images. Most of 
 the work will be on the data and javascript sides but I want to test the 
-feasibility of this implementation of some of the basics. 
+feasibility of this implementation of some of the basics.
 
-There is a PostgreSQL/PostGIS version (recommended), intended for use with Open 
-Street Map data, and an accompanying js example that includes the transforms 
-necessary to work with its default mercator. There is also a MySQL version that 
-works directly on the WKB layer, and expects Lon and Lat (it's kind of a demo.)
+To use, edit db.conf.c with your database settings, adapt one of the example
+queries in `canvasback.c` as `base_query`, then:
+
+`make`
+`./canvasback`
+
+Access the GeoJSON at: `http://localhost:7987/any/thing?bbox=-122,37,-123.3,38.8`
+
+This is intended to work well with polymaps/modestmaps bounding box substitution 
+variables and vector tile map stuff.
+
+There is also a couple of fcgi versions, one that parses mysql's wkb records and 
+supports only 3-4 geometry types, and a more standard libpq postgis thing. These 
+are all iterations on ideas for getting enough data out of a db quickly enough to 
+make visually meaningful maps on the fly. I'm finding that I like CouchDB for a 
+lot of the background vector stuff, so as I work on this I want to focus on 
+making a little evented bridge to PostGIS, especially for routing, geocoding,
+complex queries, all that awesome. If that sounds like fun to you get in touch.
 
 ***sample output***
 
