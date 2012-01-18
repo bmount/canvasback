@@ -192,14 +192,14 @@ void fmt_res (client_t* client)
 }
 
 
-void* send_conn (client_t* client) 
+void send_conn (client_t* client) 
 {
   char bbox_query[500];
   PGconn *conn;
   PostgresPollingStatusType status;
   conn = PQconnectStart(connection_string);
   if (PQstatus(conn) == CONNECTION_BAD) {
-    return NULL;
+    return;
   } 
   else {
     do {

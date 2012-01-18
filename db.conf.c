@@ -6,7 +6,7 @@
 
 int max_query_index = 1;
 
-const char *connection_string = "dbname=gis host=/tmp";
+const char *connection_string = "dbname=sfosm host=/tmp";
 
 static char *query_with_cursor[] = {
    /* 0 tabblock for big viz */ 
