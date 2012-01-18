@@ -8,8 +8,8 @@ feasibility of this implementation of some of the basics.
 To use, edit db.conf.c with your database settings, adapt one of the example
 queries in `canvasback.c` as `base_query`, then:
 
-`make`
-`./canvasback`
+`make
+./canvasback`
 
 Access the GeoJSON at: `http://localhost:7987/any/thing?bbox=-122,37,-123.3,38.8`
 
