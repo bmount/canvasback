@@ -23,19 +23,25 @@
 unsigned short port = PORT;
 int listen_sock;
 
-/*   GeoJSON (st_asgeojson) must be first field of query
-     
-     Example geometry-only query:
+/* 
+   working on binary branch, default behavior here. Use fmt_res_bin and db_bin_cb as callback
+   query should return wkb (postgis st_asbinary) as only column
+
+  For geojson: use a fmt_res_geojson and db_geojson_bin as callback 
+  with a query like this (geometry first, everything else will be properties):
+
+  Example geometry-only query:
    
-     char base_query[600] = "select st_asgeojson(st_transform(way, 4326)) from planet_osm_roads where way && st_envelope(st_transform(st_geomfromtext('linestring(%f %f,%f %f)', 4326), 900913)) limit 30;";
+  char base_query[600] = "select st_asgeojson(st_transform(way, 4326)) from planet_osm_roads where way && st_envelope(st_transform(st_geomfromtext('linestring(%f %f,%f %f)', 4326), 900913)) limit 30;";
 
-   All fields besides the geometry as properties, in a geometry collection:
+   All fields besides the geometry as properties:
 
-char base_query[600] = "select st_asgeojson(way), * from planet_osm_roads where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326)) limit 30;";
+    char base_query[600] = "select st_asgeojson(way), * from planet_osm_roads where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326)) limit 30;";
+
 
 */
 
-char base_query[600] = "select st_asgeojson(way) from planet_osm_roads where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326)) limit 30;";
+char base_query[600] = "select st_asbinary(way) from planet_osm_roads where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326)) limit 30;";
 
 
 typedef struct {
@@ -55,8 +61,46 @@ typedef struct {
   picoev_loop* loop;
 } client_t;
 
+void fmt_res_bin (client_t* client) {
+  PGresult *res = PQgetResult(client->conn);
+  int s, r, c, num_rows, num_cols;
+  num_rows = PQntuples(res);
+  num_cols = PQnfields(res);
+  int chunk_cnt = 0;
+  if (num_rows > 0) {
+    printf("num_rows %x\n", num_rows);
+  }
+  char* chunk_val = (char*)malloc(23);
+  if (num_rows <= 0) {
+    s = write(client->fd, "0\r\n\r\n", 5);
+    PQclear(res);
+    picoev_del(client->loop, client->fd);
+    close(client->fd);
+    free(client);
+    free(chunk_val);
+    return;
+  }
+  for (r = 0; r < num_rows; r++) {
+    chunk_cnt += (PQgetlength(res, r, 0) + 7); // (p)add the zzz
+  }
+  sprintf(chunk_val, "%x\r\n", chunk_cnt); 
+  printf("reported length: %s", chunk_val);
+  s = write(client->fd, chunk_val, strlen(chunk_val));
+  for (r = 0; r < num_rows; r++) {
+    s = write(client->fd, "zzzzzzz", 7); // make client stuff simpler for the moment
+    s = write(client->fd, PQgetvalue(res, r, 0), PQgetlength(res, r, 0));
+  }
+  s = write(client->fd, "\r\n0\r\n\r\n", 7);
+  PQclear(res);
+  picoev_del(client->loop, client->fd);
+  close(client->fd);
+  free(client);
+  free(chunk_val);
+  return;
+}
 
-void fmt_res (client_t* client) 
+
+void fmt_res_geojson (client_t* client) 
 {
   PGresult *res = PQgetResult(client->conn);
   int s, r, c, num_rows, num_cols,
@@ -66,25 +110,24 @@ void fmt_res (client_t* client)
   last_row = num_rows-1;
   last_col = num_cols-1;
   int chunk_cnt;
-  char chunk_val[23];
+  char* chunk_val = (char*)malloc(23);
   if (num_rows <= 0) {
-    s = write(client->fd, "21\r\n{\"error\":\"bad_query\"}", 25);
+    s = write(client->fd, "f5\r\n{\"error\":\"bad_query\"}", 25);
     PQclear(res);
     close(client->fd);
     picoev_del(client->loop, client->fd);
     // Figure out hanging behavior
     //PQfinish(client->conn);
     free(client);
+    free(chunk_val);
     return;
   }
   if (num_cols == 1) {
-    // think this overreports char count,
-    // not sure why
     chunk_cnt = 41 + 12 + 2 + 12 + 3;
     for (r = 0; r < num_rows; r++) {
       chunk_cnt += PQgetlength(res, r, 0);
     }
-    sprintf(chunk_val, "%d\r\n", chunk_cnt);
+    sprintf(chunk_val, "%x\r\n", chunk_cnt);
     s = write(client->fd, chunk_val, strlen(chunk_val));
     s = write(client->fd, 
         "{\"type\":\"FeatureCollection\",\"features\":[", 41);
@@ -108,6 +151,7 @@ void fmt_res (client_t* client)
     picoev_del(client->loop, client->fd);
     //PQfinish(client->conn);
     free(client);
+    free(chunk_val);
     return;
   }
 
@@ -121,7 +165,7 @@ void fmt_res (client_t* client)
       }
     }
 
-    sprintf(chunk_val, "%d\r\n", chunk_cnt);
+    sprintf(chunk_val, "%x\r\n", chunk_cnt);
     s = write(client->fd, chunk_val, strlen(chunk_val));
     s = write(client->fd, 
         "{\"type\":\"FeatureCollection\",\"features\":[", 
@@ -187,6 +231,7 @@ void fmt_res (client_t* client)
     close(client->fd);
     //PQfinish(client->conn);
     free(client);
+    free(chunk_val);
     return;
   }
 }
@@ -211,16 +256,45 @@ void send_conn (client_t* client)
         client->bbox.y1,
         client->bbox.x2,
         client->bbox.y2);
-    PQsendQuery(conn, bbox_query);
+    printf("%s\n", bbox_query);
+    PQsendQueryParams(conn, 
+                      bbox_query,
+                      0,
+                      NULL,
+                      NULL,
+                      NULL,
+                      NULL,
+                      1);
   }
   client->conn = conn;
   return;
 }
 
-void db_cb (picoev_loop* loop, int fd, int revents, void* cb_arg)
+/*
+ * int PQsendQuery(PGconn *conn, const char *command);
+ * for geojson etc: http://www.postgresql.org/docs/9.1/static/libpq-async.html
+ *
+int PQsendQueryParams(PGconn *conn,
+                      const char *command,
+                      int nParams,
+                      const Oid *paramTypes,
+                      const char * const *paramValues,
+                      const int *paramLengths,
+                      const int *paramFormats,
+                      int resultFormat);
+*/
+
+void db_bin_cb (picoev_loop* loop, int fd, int revents, void* cb_arg)
 {
   client_t* client = (client_t*)cb_arg;
-  fmt_res(client);
+  fmt_res_bin(client);
+  return;
+}
+
+void db_geojson_cb (picoev_loop* loop, int fd, int revents, void* cb_arg)
+{
+  client_t* client = (client_t*)cb_arg;
+  fmt_res_geojson(client);
   return;
 }
 
@@ -267,8 +341,8 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
 
 
 #define RES_HEAD "HTTP/1.1 200 OK\r\n" \
+    "Content-Type: application/octet-stream\r\n" \
     "Transfer-Encoding: chunked\r\n" \
-    "Content-Type: application/json\r\n" \
     "\r\n" 
 
   r = write(fd, RES_HEAD, sizeof(RES_HEAD) - 1);
@@ -325,7 +399,7 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
   printf("client fd: %d\n", fd);
   printf("client bbox: %f, %f, %f, %f\n", client->bbox.x1, client->bbox.y1, client->bbox.x2, client->bbox.y2);
   int dbfd = PQsocket(client->conn);
-  picoev_add(loop, dbfd, PICOEV_READ, 0, db_cb, (void*)client);
+  picoev_add(loop, dbfd, PICOEV_READ, 0, db_bin_cb, (void*)client);
   return;
 
  CLOSE:

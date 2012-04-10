@@ -1,0 +1,58 @@
+<!doctype html>
+
+<html>
+
+  <head>
+  </head>
+
+  <body>
+
+<script>
+
+var gxhr = new XMLHttpRequest()
+gxhr.open("GET", "/_canvasback/all/geoms?bbox=-123,0,0,90", true)
+// testing on teczno metro sf osm extract postgis 2.0.0
+gxhr.responseType = "arraybuffer"
+
+gxhr.onload = function (evt) {
+  console.log(evt)
+  var arrBuf = gxhr.response;
+  console.log(arrBuf)
+  if (!arrBuf) return
+  var geomType = new Uint32Array(arrBuf, 0, 4),
+    zeroPts = new ArrayBuffer(arrBuf, 12, 1024) //, // test concept on linestring
+    lineRecs = new Float64Array(arrBuf, 16, 100)
+  console.log('ogc geom type:')
+  console.log(geomType[2])
+  console.log('num recs')
+  console.log(geomType[3])
+  console.log('maybe 2-3 meaningful points at idx 2-3:')
+  for (var i = 0; i < 24; i++) {
+    console.log(lineRecs[i])
+  }
+}
+
+/*
+
+w00t works on some osm ways
+ogc geom type:
+2
+num recs
+2048 // =/
+
+maybe 2-3 meaningful points at idx 2-3:
+-122.7366713
+37.9255327
+-122.7365151
+37.9253611
+-122.7363762
+37.9251445
+
+*/
+
+gxhr.send(null);
+
+</script>
+</body>
+
+</html>

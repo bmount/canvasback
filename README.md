@@ -1,3 +1,6 @@
+Notes for WKA branch: WKA is Well-Known Array, an idea for doing OGC
+Well-Known Binary or EWKB in javascript typed arrays
+
 `canvasback` is inspired by the work of [Cartagen](http://cartagen.org) and 
 [Eric Fischer](http://www.flickr.com/photos/walkingsf/). The goal is to create
 a fast json endpoint for simple 2d mapping in html5 elements, minimal 
@@ -8,8 +11,9 @@ feasibility of this implementation of some of the basics.
 To use, edit db.conf.c with your database settings, adapt one of the example
 queries in `canvasback.c` as `base_query`, then:
 
-`make
-./canvasback`
+`make`
+
+`./canvasback`
 
 Access the GeoJSON at: `http://localhost:7987/any/thing?bbox=-122,37,-123.3,38.8`
 
