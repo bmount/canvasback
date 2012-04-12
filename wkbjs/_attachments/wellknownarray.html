@@ -6,49 +6,153 @@
   </head>
 
   <body>
+    <div id="topbar">
+      <a id="zin">zoom in</a>  
+      <a id="zout">zoom out</a>  
+      <a id="west">west</a>  
+      <a id="east">east</a>  
+      <a id="north">north</a>
+      <a id="south">south</a>
+      <div id="loadMsg">(Loading... may take a few secs)</a> <img src="spinner.gif" /></div>
+    </div>
+    <canvas id="canv" height=1000 width=1000></canvas>
+
+<!-- 
+     this is the initial idea, served directly from postgis well-known binary:
+     gxhr.open("GET", "/_canvasback/all/geoms?bbox="+proj.canvasbackBBox(), true)
+     see github.com/bvmou/canvasback, MIT license
+     testing on teczno.com metro sf osm extract postgis 2.0.0
+     must be linestrings for the moment, ie OSM roads/lines
+     Currently supports only PHILZONICAL projection, based
+     on distances to/from Philz on 24th St SF CA
+-->
 
 <script>
 
-var gxhr = new XMLHttpRequest()
-gxhr.open("GET", "/_canvasback/all/geoms?bbox=-123,0,0,90", true)
-// testing on teczno metro sf osm extract postgis 2.0.0
-gxhr.responseType = "arraybuffer"
 
-gxhr.onload = function (evt) {
-  console.log(evt)
-  var arrBuf = gxhr.response;
-  console.log(arrBuf)
-  if (!arrBuf) return
-  var geomType = new Uint32Array(arrBuf, 0, 4),
-    zeroPts = new ArrayBuffer(arrBuf, 12, 1024) //, // test concept on linestring
-    lineRecs = new Float64Array(arrBuf, 16, 100)
-  console.log('ogc geom type:')
-  console.log(geomType[2])
-  console.log('num recs')
-  console.log(geomType[3])
-  console.log('maybe 2-3 meaningful points at idx 2-3:')
-  for (var i = 0; i < 24; i++) {
-    console.log(lineRecs[i])
+function Philzonical (cp, dist, canvsize) {
+  this.lonf = 0.011322193780361452
+  this.latf = 0.009021504016638069
+  this.y = canvsize
+  this.minlon = cp[0] - this.lonf * dist
+  this.maxlon = cp[0] + this.lonf * dist
+  this.minlat = cp[1] - this.latf * dist
+  this.maxlat = cp[1] + this.latf * dist
+  this.dx = this.maxlon - this.minlon
+  this.dy = this.maxlat - this.minlat
+  this.cvx = canvsize / this.dx
+  this.cvy = canvsize / this.dy
+
+  this.trans = function (x, y) { 
+    return [(x - this.minlon) * this.cvx,
+            this.y - (y - this.minlat) * this.cvy]
+  }
+          
+  this.transx = function (x) {
+    return (x - this.minlon) * this.cvx
+  }
+
+  this.transy = function (y) {
+    return this.y - (y - this.minlat) * this.cvy
+  }
+
+  this.canvasbackBBox = function () { 
+    return [this.minlon, this.minlat, 
+            this.maxlon, this.maxlat].join()
   }
 }
 
-/*
 
-w00t works on some osm ways
-ogc geom type:
-2
-num recs
-2048 // =/
+var wkbCache = { geoms : true,
+                 loc : [-122.41, 37.79],
+                 dist : 10.5 }
 
-maybe 2-3 meaningful points at idx 2-3:
--122.7366713
-37.9255327
--122.7365151
-37.9253611
--122.7363762
-37.9251445
+var gxhr = new XMLHttpRequest()
 
-*/
+gxhr.open("GET", "osm_bayarea_padded.wkb", true)
+
+
+gxhr.responseType = "arraybuffer"
+
+gxhr.onload = function (evt) {
+  canv = document.querySelector("#canv")
+  ctx = canv.getContext('2d')
+  loadMsg = document.querySelector("#loadMsg")
+  document.querySelector("#topbar").removeChild(loadMsg)
+  var arrBuf = gxhr.response
+  if (!arrBuf) return
+  wkbCache.geoms = arrBuf
+  renderMap()
+}
+
+function renderMap () {
+  var proj = new Philzonical(wkbCache.loc, wkbCache.dist, 1000)
+  canv = document.querySelector("#canv")
+  ctx = canv.getContext('2d')
+  ctx.clearRect(0,0,1000,1000)
+  var arrBuf = wkbCache.geoms;
+  if (!arrBuf) return
+  var pts = new Float64Array(arrBuf),
+      skip = 0, 
+      bytes = arrBuf.byteLength,
+      ngeoms = 0, 
+      geomDesc, lmax
+  while (skip < bytes) {
+    ngeoms++
+    geomDesc = new Uint32Array(arrBuf, skip, 4)
+    numPts = geomDesc[3]
+    ptsFloatIdxLen = numPts * 2 
+    var jump = skip/8 + 2
+    ctx.beginPath()
+    ctx.strokeStyle = '#'+Math.floor(Math.random()*16777215).toString(16)
+    ctx.lineWidth = 5
+    ctx.moveTo.apply(ctx, proj.trans(pts[jump], pts[jump+1]))
+    for (var k = 2; k < ptsFloatIdxLen; k+=2) {
+      ctx.lineTo.apply(ctx, proj.trans(pts[jump+k], pts[jump+k+1]))
+    }
+    ctx.stroke()
+    ctx.closePath()
+    skip += 16 * (numPts + 1)
+  }
+}
+
+var zoomin = document.querySelector("#zin")
+var zoomout = document.querySelector("#zout")
+var east = document.querySelector("#east")
+var west = document.querySelector("#west")
+var north = document.querySelector("#north")
+var south = document.querySelector("#south")
+
+zoomin.addEventListener('click', function () { 
+  wkbCache.dist = wkbCache.dist / 1.5
+  renderMap()
+})
+
+zoomout.addEventListener('click', function () { 
+  wkbCache.dist = wkbCache.dist * 1.5
+  renderMap()
+})
+
+east.addEventListener('click', function () { 
+  wkbCache.loc = [wkbCache.loc[0] + .005 * wkbCache.dist, wkbCache.loc[1]]
+  renderMap()
+})
+
+west.addEventListener('click', function () { 
+  wkbCache.loc = [wkbCache.loc[0] - .005 * wkbCache.dist, wkbCache.loc[1]]
+  renderMap()
+})
+
+north.addEventListener('click', function () { 
+  wkbCache.loc = [wkbCache.loc[0], wkbCache.loc[1] + .004 * wkbCache.dist]
+  renderMap()
+})
+
+south.addEventListener('click', function () { 
+  wkbCache.loc = [wkbCache.loc[0], wkbCache.loc[1] - .004 * wkbCache.dist]
+  renderMap()
+})
+
 
 gxhr.send(null);
 

@@ -41,8 +41,14 @@ int listen_sock;
 
 */
 
-char base_query[600] = "select st_asbinary(way) from planet_osm_roads where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326)) limit 30;";
 
+//char base_query[600] = "select st_asbinary(sway) from planet_osm_roads where sway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
+
+//char base_query[600] = "select st_asbinary(sway) from planet_osm_roads where sway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
+
+//char base_query[600] = "select st_asbinary(way) from planet_osm_line where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
+
+char base_query[600] = "select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326)) and boundary is null;";
 
 typedef struct {
   double x1;
@@ -87,7 +93,10 @@ void fmt_res_bin (client_t* client) {
   printf("reported length: %s", chunk_val);
   s = write(client->fd, chunk_val, strlen(chunk_val));
   for (r = 0; r < num_rows; r++) {
-    s = write(client->fd, "zzzzzzz", 7); // make client stuff simpler for the moment
+    s = write(client->fd, "yunopad", 7); 
+    // js typed array offsets must be multiple of type so pad ndr val to
+    // make 8 bytes (forgettable), 4 byte geomtype, 4 byte num recs -> 
+    // array of doubles offsettable by 16,
     s = write(client->fd, PQgetvalue(res, r, 0), PQgetlength(res, r, 0));
   }
   s = write(client->fd, "\r\n0\r\n\r\n", 7);
