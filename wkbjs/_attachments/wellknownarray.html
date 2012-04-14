@@ -64,19 +64,19 @@ function Philzonical (cp, dist, canvsize) {
 
 
 var wkbCache = { geoms : true,
-                 loc : [-122.41, 37.79],
-                 dist : 10.5 }
+                 loc : [-122.44, 37.77],
+                 dist : 6.5 }
 
 var gxhr = new XMLHttpRequest()
 
-gxhr.open("GET", "osm_bayarea_padded.wkb", true)
+gxhr.open("GET", "osm_sf_ctr_padded.wkb", true)
 
+//var proj = new Philzonical(wkbCache.loc, wkbCache.dist, 1000)
+//gxhr.open("GET", "/_canvasback/all/geoms?bbox="+proj.canvasbackBBox(), true)
 
 gxhr.responseType = "arraybuffer"
 
 gxhr.onload = function (evt) {
-  canv = document.querySelector("#canv")
-  ctx = canv.getContext('2d')
   loadMsg = document.querySelector("#loadMsg")
   document.querySelector("#topbar").removeChild(loadMsg)
   var arrBuf = gxhr.response
@@ -95,10 +95,8 @@ function renderMap () {
   var pts = new Float64Array(arrBuf),
       skip = 0, 
       bytes = arrBuf.byteLength,
-      ngeoms = 0, 
-      geomDesc, lmax
+      geomDesc 
   while (skip < bytes) {
-    ngeoms++
     geomDesc = new Uint32Array(arrBuf, skip, 4)
     numPts = geomDesc[3]
     ptsFloatIdxLen = numPts * 2 
