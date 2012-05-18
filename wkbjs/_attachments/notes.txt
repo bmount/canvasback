@@ -1,0 +1,9 @@
+wget -O osm_sf_ctr_padded.wkb http://localhost:5984/_canvasback/all/geoms?bbox=-122.51359425957234,37.71136022389186,-122.36640574042765,37.82863977610815
+
+binary query: select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(-122.513594 37.711360,-122.366406 37.828640)', 4326)) and boundary is null
+
+495k
+
+geosjon query: select st_asgeojson(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(-122.513594 37.711360,-122.366406 37.828640)', 4326)) and boundary is null
+
+as FeatureCollection: 1.3M

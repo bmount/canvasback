@@ -1,0 +1,153 @@
+<!doctype html>
+
+<html>
+
+  <head>
+  </head>
+
+  <body>
+    <div id="topbar">
+      <a id="zin">zoom in</a>  
+      <a id="zout">zoom out</a>  
+      <a id="west">west</a>  
+      <a id="east">east</a>  
+      <a id="north">north</a>
+      <a id="south">south</a>
+      <div id="loadMsg">(Loading... may take a few secs)</a> <img src="spinner.gif" /></div>
+    </div>
+    <canvas id="canv" height=1000 width=1000></canvas>
+
+<!-- 
+     this is the initial idea, served directly from postgis well-known binary:
+     gxhr.open("GET", "/_canvasback/all/geoms?bbox="+proj.canvasbackBBox(), true)
+     see github.com/bvmou/canvasback, MIT license
+     testing on teczno.com metro sf osm extract postgis 2.0.0
+     must be linestrings for the moment, ie OSM roads/lines
+     Currently supports only PHILZONICAL projection, based
+     on distances to/from Philz on 24th St SF CA
+-->
+
+<script>
+
+
+function Philzonical (cp, dist, canvsize) {
+  this.lonf = 0.011322193780361452
+  this.latf = 0.009021504016638069
+  this.y = canvsize
+  this.minlon = cp[0] - this.lonf * dist
+  this.maxlon = cp[0] + this.lonf * dist
+  this.minlat = cp[1] - this.latf * dist
+  this.maxlat = cp[1] + this.latf * dist
+  this.dx = this.maxlon - this.minlon
+  this.dy = this.maxlat - this.minlat
+  this.cvx = canvsize / this.dx
+  this.cvy = canvsize / this.dy
+
+  this.trans = function (x, y) { 
+    return [(x - this.minlon) * this.cvx,
+            this.y - (y - this.minlat) * this.cvy]
+  }
+          
+  this.transx = function (x) {
+    return (x - this.minlon) * this.cvx
+  }
+
+  this.transy = function (y) {
+    return this.y - (y - this.minlat) * this.cvy
+  }
+
+  this.canvasbackBBox = function () { 
+    return [this.minlon, this.minlat, 
+            this.maxlon, this.maxlat].join()
+  }
+}
+
+
+var wkbCache = { geoms : true,
+                 loc : [-122.44, 37.77],
+                 dist : 6.5 }
+
+
+var gxhr = new XMLHttpRequest()
+
+//gxhr.open("GET", "sf_osm_featurecollection.json", true)
+gxhr.open("GET", "sf_osm_json.tar.gz", true)
+//gxhr.open("GET", "osm_sf_ctr_padded.wkb", true)
+
+//var proj = new Philzonical(wkbCache.loc, wkbCache.dist, 1000)
+//gxhr.open("GET", "/_canvasback/all/geoms?bbox="+proj.canvasbackBBox(), true)
+
+//gxhr.responseType = "application/json"
+
+gxhr.onload = function (evt) {
+  loadMsg = document.querySelector("#loadMsg")
+  document.querySelector("#topbar").removeChild(loadMsg)
+  var featureCollection = gxhr.responseText
+  if (0) return
+  wkbCache.geoms = JSON.parse(featureCollection)
+  renderMap()
+}
+
+function renderMap () {
+  var proj = new Philzonical(wkbCache.loc, wkbCache.dist, 1000)
+  canv = document.querySelector("#canv")
+  ctx = canv.getContext('2d')
+  ctx.clearRect(0,0,1000,1000)
+  wkbCache.geoms.features.forEach(function (geom) {
+    ctx.beginPath()
+    ctx.strokeStyle = '#'+Math.floor(Math.random()*16777215).toString(16)
+    ctx.lineWidth = 5
+    var coordlen = geom.coordinates.length
+    ctx.moveTo.apply(ctx, proj.trans(geom.coordinates[0][0], geom.coordinates[0][1]))
+    for (var k = 1; k < coordlen; k++) {
+      ctx.lineTo.apply(ctx, proj.trans(geom.coordinates[k][0], geom.coordinates[k][1]))
+    }
+    ctx.stroke()
+    ctx.closePath()
+  })
+}
+
+var zoomin = document.querySelector("#zin")
+var zoomout = document.querySelector("#zout")
+var east = document.querySelector("#east")
+var west = document.querySelector("#west")
+var north = document.querySelector("#north")
+var south = document.querySelector("#south")
+
+zoomin.addEventListener('click', function () { 
+  wkbCache.dist = wkbCache.dist / 1.5
+  renderMap()
+})
+
+zoomout.addEventListener('click', function () { 
+  wkbCache.dist = wkbCache.dist * 1.5
+  renderMap()
+})
+
+east.addEventListener('click', function () { 
+  wkbCache.loc = [wkbCache.loc[0] + .005 * wkbCache.dist, wkbCache.loc[1]]
+  renderMap()
+})
+
+west.addEventListener('click', function () { 
+  wkbCache.loc = [wkbCache.loc[0] - .005 * wkbCache.dist, wkbCache.loc[1]]
+  renderMap()
+})
+
+north.addEventListener('click', function () { 
+  wkbCache.loc = [wkbCache.loc[0], wkbCache.loc[1] + .004 * wkbCache.dist]
+  renderMap()
+})
+
+south.addEventListener('click', function () { 
+  wkbCache.loc = [wkbCache.loc[0], wkbCache.loc[1] - .004 * wkbCache.dist]
+  renderMap()
+})
+
+
+gxhr.send(null);
+
+</script>
+</body>
+
+</html>

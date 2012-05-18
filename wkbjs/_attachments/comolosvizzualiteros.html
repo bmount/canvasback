@@ -7,15 +7,23 @@
 
   <body>
     <div id="topbar">
-      <a id="zin">zoom in</a>  
-      <a id="zout">zoom out</a>  
-      <a id="west">west</a>  
-      <a id="east">east</a>  
-      <a id="north">north</a>
-      <a id="south">south</a>
+      <p><a id="zin">neeear</a></p>
+      <img id="nearfar" height="50px" src="nearfar.png" /> 
+      <p><a id="zout">faaar</a></p>
+      <p><a id="west">west</a></p>
+      <p><a id="east">east</a></p>
+      <p><a id="north">north</a></p>
+      <p><a id="south">south</a></p>
+      <p><a href="ref-en.html">write-up</a></p>
+      <!--
+      <a id="west"><img src="west.png" height="50px" /></a> 
+      <a id="east"><img src="east.png" height="50px" /></a>  
+      <a id="north"><img src="santa.gif" height="50px" /></a>
+      <a id="south"><img src="dukes.jpg" height="50px" /></a>
+      -->
       <div id="loadMsg">(Loading... may take a few secs)</a> <img src="spinner.gif" /></div>
     </div>
-    <canvas id="canv" height=1000 width=1000></canvas>
+    <canvas id="canv"></canvas>
 
 <!-- 
      this is the initial idea, served directly from postgis well-known binary:
@@ -27,12 +35,35 @@
      on distances to/from Philz on 24th St SF CA
 -->
 
+<style>
+
+  body { line-height: 50%; font-family: Helvetica; background:url("pt3.png"); }
+  canvas { background:url("pt3.png"); }
+  #topbar { position: absolute; top: 4px; }
+  #loadMsg { position: relative; margin-top: 20px; }
+
+</style>
+
 <script>
 
+var __ = function (qs) { return document.querySelector(qs) }
+
+var wkbCache = { geoms : true,
+                 loc : [-122.44, 37.77],
+                 dist : 6.5 }
+
+function screenDims () {
+  var canvas = __("#canv")
+  var ch =  window.innerHeight-20,
+      cw = window.innerWidth
+  canvas.setAttribute("height", ch)
+  canvas.setAttribute("width", cw)
+  return (ch >= cw) ? ch : cw
+}
 
 function Philzonical (cp, dist, canvsize) {
-  this.lonf = 0.011322193780361452
-  this.latf = 0.009021504016638069
+  this.lonf = 0.0113222
+  this.latf = 0.0090215
   this.y = canvsize
   this.minlon = cp[0] - this.lonf * dist
   this.maxlon = cp[0] + this.lonf * dist
@@ -64,46 +95,57 @@ function Philzonical (cp, dist, canvsize) {
 
 
 var wkbCache = { geoms : true,
-                 loc : [-122.44, 37.77],
-                 dist : 6.5 }
+                 loc : [-122.44, 37.72],
+                 dist : 10.5,
+                 OaklandOnThere: false }
 
-var gxhr = new XMLHttpRequest()
 
-gxhr.open("GET", "osm_sf_ctr_padded.wkb", true)
+function fetchGeoms(url_) {
+  var gxhr = new XMLHttpRequest()
 
-//var proj = new Philzonical(wkbCache.loc, wkbCache.dist, 1000)
-//gxhr.open("GET", "/_canvasback/all/geoms?bbox="+proj.canvasbackBBox(), true)
+  gxhr.open("GET", url_, true)
+  //gxhr.open("GET", "osm_sf_ctr_padded.wkb", true)
 
-gxhr.responseType = "arraybuffer"
+  //var proj = new Philzonical(wkbCache.loc, wkbCache.dist, 1000)
+  //gxhr.open("GET", "/_canvasback/all/geoms?bbox="+proj.canvasbackBBox(), true)
 
-gxhr.onload = function (evt) {
-  loadMsg = document.querySelector("#loadMsg")
-  document.querySelector("#topbar").removeChild(loadMsg)
-  var arrBuf = gxhr.response
-  if (!arrBuf) return
-  wkbCache.geoms = arrBuf
-  renderMap()
+  gxhr.responseType = "arraybuffer"
+
+  gxhr.onload = function (evt) {
+    loadMsg = document.querySelector("#loadMsg")
+    if (loadMsg) __("#topbar").removeChild(loadMsg)
+    var arrBuf = gxhr.response
+    if (!arrBuf) return
+    wkbCache.geoms = arrBuf
+    renderMap()
+  }
+  
+  gxhr.send(null);
 }
 
 function renderMap () {
-  var proj = new Philzonical(wkbCache.loc, wkbCache.dist, 1000)
+  var proj = new Philzonical(wkbCache.loc, wkbCache.dist, screenDims())
   canv = document.querySelector("#canv")
   ctx = canv.getContext('2d')
-  ctx.clearRect(0,0,1000,1000)
+  ctx.clearRect(0,0,canv.width, canv.height)
   var arrBuf = wkbCache.geoms;
   if (!arrBuf) return
   var pts = new Float64Array(arrBuf),
       skip = 0, 
       bytes = arrBuf.byteLength,
-      geomDesc 
+      geomDesc, r, jump
   while (skip < bytes) {
     geomDesc = new Uint32Array(arrBuf, skip, 4)
     numPts = geomDesc[3]
     ptsFloatIdxLen = numPts * 2 
-    var jump = skip/8 + 2
+    jump = skip/8 + 2
     ctx.beginPath()
-    ctx.strokeStyle = '#'+Math.floor(Math.random()*16777215).toString(16)
-    ctx.lineWidth = 5
+    r = Math.random()
+    ctx.strokeStyle = "rgba(55,0,130, " + (0.01 + 0.3*r) + ")"
+    ctx.lineWidth = Math.floor(1.5 + r)
+    //
+    //ctx.strokeStyle = '#'+Math.floor(Math.random()*16777215).toString(16)
+    //ctx.lineWidth = 5
     ctx.moveTo.apply(ctx, proj.trans(pts[jump], pts[jump+1]))
     for (var k = 2; k < ptsFloatIdxLen; k+=2) {
       ctx.lineTo.apply(ctx, proj.trans(pts[jump+k], pts[jump+k+1]))
@@ -114,21 +156,28 @@ function renderMap () {
   }
 }
 
-var zoomin = document.querySelector("#zin")
-var zoomout = document.querySelector("#zout")
-var east = document.querySelector("#east")
-var west = document.querySelector("#west")
-var north = document.querySelector("#north")
-var south = document.querySelector("#south")
+var zoomin = __("#zin")
+var zoomout = __("#zout")
+var east = __("#east")
+var west = __("#west")
+var north = __("#north")
+var south = __("#south")
+var big = __("#big")
 
 zoomin.addEventListener('click', function () { 
   wkbCache.dist = wkbCache.dist / 1.5
+  wkbCache.loc = [wkbCache.loc[0], wkbCache.loc[1] + .002 * wkbCache.dist]
   renderMap()
 })
 
 zoomout.addEventListener('click', function () { 
   wkbCache.dist = wkbCache.dist * 1.5
+  wkbCache.loc = [wkbCache.loc[0], wkbCache.loc[1] - .002 * wkbCache.dist]
   renderMap()
+  if (!wkbCache.OaklandOnThere) {
+    fetchGeoms("osm_bayarea_padded.wkb")
+    wkbCache.OaklandOnThere = true
+  } 
 })
 
 east.addEventListener('click', function () { 
@@ -152,7 +201,9 @@ south.addEventListener('click', function () {
 })
 
 
-gxhr.send(null);
+document.addEventListener("DOMContentLoaded", function () {
+  fetchGeoms("osm_sf_ctr_padded.wkb")
+})
 
 </script>
 </body>

@@ -87,16 +87,12 @@ void fmt_res_bin (client_t* client) {
     return;
   }
   for (r = 0; r < num_rows; r++) {
-    chunk_cnt += (PQgetlength(res, r, 0) + 7); // (p)add the zzz
+    chunk_cnt += PQgetlength(res, r, 0); 
   }
   sprintf(chunk_val, "%x\r\n", chunk_cnt); 
   printf("reported length: %s", chunk_val);
   s = write(client->fd, chunk_val, strlen(chunk_val));
   for (r = 0; r < num_rows; r++) {
-    s = write(client->fd, "yunopad", 7); 
-    // js typed array offsets must be multiple of type so pad ndr val to
-    // make 8 bytes (forgettable), 4 byte geomtype, 4 byte num recs -> 
-    // array of doubles offsettable by 16,
     s = write(client->fd, PQgetvalue(res, r, 0), PQgetlength(res, r, 0));
   }
   s = write(client->fd, "\r\n0\r\n\r\n", 7);
