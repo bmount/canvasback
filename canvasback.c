@@ -11,6 +11,8 @@
 #include <libpq-fe.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <math.h>
 #include "picoev/picoev.h"
 #include "picohttpparser/picohttpparser.h"
 #include "db.conf.c"
@@ -20,10 +22,13 @@
 #define MAX_FDS 100000
 #define TIMEOUT_SECS 10
 
+#define EARTH 6378137
+
 unsigned short port = PORT;
 int listen_sock;
 
 /* 
+typedef unsigned char uint8;
    working on binary branch, default behavior here. Use fmt_res_bin and db_bin_cb as callback
    query should return wkb (postgis st_asbinary) as only column
 
@@ -48,7 +53,7 @@ int listen_sock;
 
 //char base_query[600] = "select st_asbinary(way) from planet_osm_line where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
 
-char base_query[600] = "select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326)) and boundary is null;";
+char base_query[600] = "select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
 
 typedef struct {
   double x1;
@@ -59,13 +64,21 @@ typedef struct {
 } bbox_t;
 
 typedef struct {
+  int z;
+  int x;
+  int y;
+} tms_t;
+
+typedef struct {
   int fd;
   char* buf;
   char* query;
   bbox_t bbox;
+  tms_t tile;
   PGconn* conn;
   picoev_loop* loop;
 } client_t;
+
 
 void fmt_res_bin (client_t* client) {
   PGresult *res = PQgetResult(client->conn);
@@ -74,7 +87,7 @@ void fmt_res_bin (client_t* client) {
   num_cols = PQnfields(res);
   int chunk_cnt = 0;
   if (num_rows > 0) {
-    printf("num_rows %x\n", num_rows);
+    printf("num_rows %d\n", num_rows);
   }
   char* chunk_val = (char*)malloc(23);
   if (num_rows <= 0) {
@@ -105,142 +118,19 @@ void fmt_res_bin (client_t* client) {
 }
 
 
-void fmt_res_geojson (client_t* client) 
-{
-  PGresult *res = PQgetResult(client->conn);
-  int s, r, c, num_rows, num_cols,
-      last_row, last_col;
-  num_rows = PQntuples(res);
-  num_cols = PQnfields(res);
-  last_row = num_rows-1;
-  last_col = num_cols-1;
-  int chunk_cnt;
-  char* chunk_val = (char*)malloc(23);
-  if (num_rows <= 0) {
-    s = write(client->fd, "f5\r\n{\"error\":\"bad_query\"}", 25);
-    PQclear(res);
-    close(client->fd);
-    picoev_del(client->loop, client->fd);
-    // Figure out hanging behavior
-    //PQfinish(client->conn);
-    free(client);
-    free(chunk_val);
-    return;
-  }
-  if (num_cols == 1) {
-    chunk_cnt = 41 + 12 + 2 + 12 + 3;
-    for (r = 0; r < num_rows; r++) {
-      chunk_cnt += PQgetlength(res, r, 0);
-    }
-    sprintf(chunk_val, "%x\r\n", chunk_cnt);
-    s = write(client->fd, chunk_val, strlen(chunk_val));
-    s = write(client->fd, 
-        "{\"type\":\"FeatureCollection\",\"features\":[", 41);
-    for (r = 0; r < (num_rows-1); r++) {
-      s = write(client->fd, "{\"geometry\":", 12);
-      s = write(client->fd,      
-          PQgetvalue(res, r, 0),
-          PQgetlength(res, r, 0));
-      s = write(client->fd, "},", 2);
-    }
-    s = write(client->fd,
-        "{\"geometry\":", 12);
-    s = write(client->fd,
-          PQgetvalue(res, r, 0),
-          PQgetlength(res, r, 0));
-    s = write(client->fd,
-          "}]}",
-          3);
-    PQclear(res);
-    close(client->fd);
-    picoev_del(client->loop, client->fd);
-    //PQfinish(client->conn);
-    free(client);
-    free(chunk_val);
-    return;
-  }
-
-  else {
-    chunk_cnt = 41 + 12 + 1 + 14 + 1 + 
-                3 + 2 + 1 + 3 + 4 + 12
-                + 1 + 15 + 3 + 3 + 3 + 5;
-    for (r = 0; r < num_rows; r++) {
-      for (c = 0; c < num_cols; c++) {
-        chunk_cnt += PQgetlength(res, r, c);
-      }
-    }
-
-    sprintf(chunk_val, "%x\r\n", chunk_cnt);
-    s = write(client->fd, chunk_val, strlen(chunk_val));
-    s = write(client->fd, 
-        "{\"type\":\"FeatureCollection\",\"features\":[", 
-        41);
-
-    for (r = 0; r < last_row; r++) {
-      c = 0;
-      s = write(client->fd,
-          "{\"geometry\":", 12);
-      s = write(client->fd,
-          PQgetvalue(res, r, c),
-          PQgetlength(res, r, c));
-      s = write(client->fd,
-          ",", 1);
-      s = write(client->fd,
-          "\"properties\":{", 14);
-      for (c = 1; c < last_col; c++) {
-        s = write(client->fd, "\"", 1);
-        s = write(client->fd,
-          PQfname(res, c), strlen(PQfname(res, c)));
-        s = write(client->fd, "\":\"", 3);
-        s = write(client->fd,
-          PQgetvalue(res, r, c), PQgetlength(res, r, c));
-        s = write(client->fd, "\",", 2);
-      }
-
-      s = write(client->fd, "\"", 1);
-      s = write(client->fd,
-          PQfname(res, c), strlen(PQfname(res, c)));
-      s = write(client->fd, "\":\"", 3);
-      s = write(client->fd,
-          PQgetvalue(res, r, last_col), PQgetlength(res, r, last_col));
-      s = write(client->fd, "\"}},", 4);
-    }
-    s = write(client->fd,
-        "{\"geometry\":",
-        12);
-    s = write(client->fd,
-        PQgetvalue(res, last_row, 0),
-        PQgetlength(res, last_row, 0));
-    s = write(client->fd, ",", 1);
-    s = write(client->fd, "\"properties\":{\"", 15);
-    for (c = 1; c < last_col; c++) {
-      s = write(client->fd, PQfname(res, c), strlen(PQfname(res, c)));
-      s = write(client->fd, "\":\"", 3);
-      s = write(client->fd,
-          PQgetvalue(res, last_row, c),
-          PQgetlength(res, last_row, c));
-      s = write(client->fd, "\",\"", 3);
-    }
-    
-    s = write(client->fd, 
-        PQfname(res, last_col), 
-        strlen(PQfname(res, last_col)));
-    s = write(client->fd, "\":\"", 3);
-    s = write(client->fd,
-        PQgetvalue(res, last_row, last_col),
-        PQgetlength(res, last_row, last_col));
-    s = write(client->fd,
-        "\"}}]}", 5);
-    PQclear(res);
-    picoev_del(client->loop, client->fd);
-    close(client->fd);
-    //PQfinish(client->conn);
-    free(client);
-    free(chunk_val);
-    return;
-  }
+void tms2bbox (client_t* cli) {
+  cli->bbox.x1 = (cli->tile.x * 40075016.6856 / pow(2.0, cli->tile.z) - 20037508.34278);
+  cli->bbox.x2 = ((cli->tile.x + 1) * 40075016.6856 / pow(2.0, cli->tile.z) - 20037508.34278);
+  cli->bbox.y1 = (cli->tile.y * 40075016.6856 / pow(2.0, cli->tile.z) - 20037508.34278);
+  cli->bbox.y2 = ((cli->tile.y + 1) * 40075016.6856 / pow(2.0, cli->tile.z) - 20037508.34278);
+  return;
 }
 
+
+uint8_t scale (double coord, int zoom, int tile) {
+  return (uint8_t)(int)(
+      (coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - (tile*256));
+}
 
 void send_conn (client_t* client) 
 {
@@ -299,7 +189,7 @@ void db_bin_cb (picoev_loop* loop, int fd, int revents, void* cb_arg)
 void db_geojson_cb (picoev_loop* loop, int fd, int revents, void* cb_arg)
 {
   client_t* client = (client_t*)cb_arg;
-  fmt_res_geojson(client);
+  //fmt_res_geojson(client);
   return;
 }
 
@@ -353,38 +243,44 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
   r = write(fd, RES_HEAD, sizeof(RES_HEAD) - 1);
 #undef RES_HEAD
   char* qval = NULL;
-  const char* delims = "&/?,= ";
-  char* qs_bbox_tok = "bbox=";
+  const char* delims = "&/?,=. ";
+  char* qs_tms_tok = "tms";
   char* qs_end_tok = "HTTP/1";
-  int h_more, bboxcmp;
-  int bbox_param_cnt = 1;
+  int h_more = 1; 
+  int bboxcmp = 1;
+  int tms_param_cnt = 1;
   int fav = -1;
   int spun_out = 0;
   const char* favicon = "favicon.ico";
   qval = strtok((char*)path, delims);
+  long int xx, yy, zz;
+  zz = xx = yy = -1;
   while (qval != NULL) {
     spun_out++;
     if (!(fav = memcmp(qval, favicon, (int)sizeof(favicon)))) {
       goto CLOSE;
     }
-    bboxcmp = memcmp(qval, qs_bbox_tok, 4);
-    h_more = memcmp(qval, qs_end_tok, 3);
+    bboxcmp = memcmp(qval, qs_tms_tok, 3);
+    printf("%d bboxcmp\n", bboxcmp);
+    h_more = memcmp(qval, qs_end_tok, 6);
     if (!bboxcmp) {
+      printf("%s\n", qval);
       qval = strtok(NULL, delims);
-      while ((qval != NULL) && (bbox_param_cnt <=4)) {
-        switch (bbox_param_cnt) {
-          case 1: client->bbox.x1 = strtod(qval, NULL); break;
-          case 2: client->bbox.y1 = strtod(qval, NULL); break;
-          case 3: client->bbox.x2 = strtod(qval, NULL); break;
-          case 4: client->bbox.y2 = strtod(qval, NULL); break;
+      while ((qval != NULL) && (tms_param_cnt <=3)) {
+        switch (tms_param_cnt) {
+          case 1: zz = strtol(qval, NULL, 10); break;
+          case 2: xx = strtol(qval, NULL, 10); break;
+          case 3: yy = strtol(qval, NULL, 10); break;
         }
-        bbox_param_cnt++;
+        tms_param_cnt++;
         qval = strtok(NULL, delims);
       }
+
       break;
     }
-    
+
     else {
+      //printf("%s\n", qval);
       if (!h_more) {
         break;
       } else {
@@ -393,16 +289,22 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
     }
     if (spun_out > 45) {
       goto CLOSE;
-    } else {
-      qval = strtok(NULL, delims);
-    }
+    } 
+    //else {
+    //  qval = strtok(NULL, delims);
+    //}
   }
+  client->tile.z = zz;
+  client->tile.x = xx;
+  client->tile.y = (1 << zz) - yy;
+  tms2bbox(client);
 
   send_conn(client);
   client->fd = fd;
   client->loop = loop;
   printf("client fd: %d\n", fd);
   printf("client bbox: %f, %f, %f, %f\n", client->bbox.x1, client->bbox.y1, client->bbox.x2, client->bbox.y2);
+  printf("client tms: %d, %d, %d\n", client->tile.z, client->tile.x, client->tile.y);
   int dbfd = PQsocket(client->conn);
   picoev_add(loop, dbfd, PICOEV_READ, 0, db_bin_cb, (void*)client);
   return;
