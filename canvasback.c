@@ -82,10 +82,6 @@ typedef struct {
   picoev_loop* loop;
 } client_t;
 
-uint8_t scale (double coord, int zoom, int tile) {
-  return (uint8_t)(int)(
-      (coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - (tile*256));
-}
 
 void fmt_res_bin (client_t* client) {
   PGresult *res = PQgetResult(client->conn);
@@ -124,35 +120,47 @@ void fmt_res_bin (client_t* client) {
   return;
 }
 
-void shorten (uint8_t* strm, double* coordbuf, int start, int end) {
-  int i;
-  for (i = start; i <= end; i++) {
-    //strm[i] = scale(coordbuf[i]);
-  }
+uint8_t scale (double coord, int zoom, int tile) {
+  return (uint8_t)(int)(
+      (coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - (tile*256));
 }
 
-/*
-void pump (client_t* client, byte* data, int len) {
-  int w;
+void pump (client_t* client, uint8_t* data, int len) {
+  printf("hit pump\n");
+  int w, i;
+  int shortlen = 0;
   char *rvstr = (char*)malloc(23);
-  sprintf(rvstr, "%x\r\n", len);
+  sprintf(rvstr, "%x\r\n", len*2);
+  printf("1/1 header %s\n", rvstr);
+  printf("pump length %d\n", len);
   w = write(client->fd, rvstr, strlen(rvstr));
-  w = write(client->fd, data, len);
+  w = write(client->fd, (char*)data, len);
   free(rvstr);
 }
-*/
+
+void short_stream (client_t* client, double* coordbuf, uint8_t* strm, int pt_count, int idx) {
+  printf("hit shortstream\n");
+  printf("pt_count %d\n", pt_count);
+  int i;
+  for (i = 0; i <= pt_count; i += 2) {
+    strm[i] = scale(coordbuf[i], client->tile.z, client->tile.x);
+    printf("scaled pt %d: %d for tile %d\n", i, strm[i], client->tile.x);
+    strm[i+1] = scale(coordbuf[i+1], client->tile.z, client->tile.y);
+    printf("scaled pt %d: %d for tile %d\n", i+1, strm[i+1], client->tile.y);
+  }
+  //pump(client, strm, pt_count * 2);
+  return;
+}
+
 
 void fmt_res_2shrt (client_t* client) {
   PGresult *res = PQgetResult(client->conn);
-  uint8_t *strm = (uint8_t*)malloc(4096);
+  uint8_t *strm;
   char *pqres;
   int s, r, c, num_rows, num_cols;
   num_rows = PQntuples(res);
   num_cols = PQnfields(res);
   int chunk_cnt = 0;
-  if (num_rows > 0) {
-    printf("num_rows %d\n", num_rows);
-  }
   char* chunk_val = (char*)malloc(23);
   if (num_rows <= 0) {
     s = write(client->fd, "0\r\n\r\n", 5);
@@ -163,23 +171,18 @@ void fmt_res_2shrt (client_t* client) {
     free(chunk_val);
     return;
   }
-  //
-  
-  //
-  
+  for (r = 0; r < num_rows; r++) {
+    chunk_cnt += PQgetlength(res, r, 0);
+  }
+  strm = (uint8_t*)malloc(chunk_cnt/8);
   int pt_count = 0;
-  int geom_count = 0;
-  int subcount = 0;
-  int pump_count = 0;
   int geom_pos = 1; // skip first endianness flag
-  int full_size = 0;
   int reslen;
   int idx = 1;
   int pts = 0;
-  full_size = subcount;
   uint32_t wkb_type;
-  int num_points, position;
   uint32_t linear_rings;
+  double* coordv;
   for (r = 0; r < num_rows; r++) {
     geom_pos = 1;
     pt_count = 0;
@@ -189,27 +192,32 @@ void fmt_res_2shrt (client_t* client) {
       wkb_type = *(uint32_t*)(&(pqres[geom_pos])); 
       printf("geom type: %d\n", wkb_type);
 
-      //printf("num pts if decomposed: %d\n", *(uint32_t*)(&pqres[geom_pos + 4]));
-      /* assume little endian, read from offset
-         always increment pointer to next geom type,
-         makes parsing compound types easier
-      */
-      //break;
-
       if (wkb_type == 1) {
-        geom_pos += 17;
-        pt_count += 1;
+        idx = 17;
+        geom_pos += idx;
+        pts = 1;
+        pt_count += pts;
+        short_stream(client, (double*)(&pqres[geom_pos]), strm, pts, 0);
       }
+
       else if (wkb_type == 2) {
-        pt_count += (int)(*(uint32_t*)(&pqres[geom_pos]));
+        pts = (int)(*(uint32_t*)(&pqres[geom_pos+4]));
+        printf("correct pts %d\n", pts);
+        coordv = (double*)(&pqres[geom_pos+8]);
         geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos + 4])) * 16 + 9);
+        short_stream(client, coordv, strm, pts, pt_count);
+        pt_count += pts;
       }
+
       else if (wkb_type == 3) {
         linear_rings = *(uint32_t*)(&pqres[geom_pos + 4]);
-        printf("linear rings: %d\n", linear_rings);
+        //printf("linear rings: %d\n", linear_rings);
         geom_pos += 8;
         while (linear_rings) {
-          pt_count += (int)(*(uint32_t*)(&pqres[geom_pos]));
+          pts = (int)(*(uint32_t*)(&pqres[geom_pos]));
+          pt_count += pts;
+          coordv = (double*)(&pqres[geom_pos+4]);
+          short_stream(client, coordv, strm, pts, 0);
           printf("point count %d\n", pt_count);
           geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos])) * 16 + 4);
           linear_rings--;
@@ -223,8 +231,9 @@ void fmt_res_2shrt (client_t* client) {
       }
     }
   }
-  printf("point count: %d\n", pt_count);
+  //printf("point count: %d\n", pt_count);
 
+  /*
   for (r = 0; r < num_rows; r++) {
     chunk_cnt += PQgetlength(res, r, 0); 
   }
@@ -235,22 +244,23 @@ void fmt_res_2shrt (client_t* client) {
   for (r = 0; r < num_rows; r++) {
     s = write(client->fd, PQgetvalue(res, r, 0), PQgetlength(res, r, 0));
   }
+  */
 
   s = write(client->fd, "\r\n0\r\n\r\n", 7);
-  printf("about to clear\n");
+  //printf("about to clear\n");
   PQclear(res);
-  printf("cleared \n");
+  //printf("cleared \n");
   //PQfinish(client->conn);
   close(client->fd);
-  printf("close client fd \n");
+  //printf("close client fd \n");
   picoev_del(client->loop, client->fd);
-  printf("cleared picoev client \n");
+  //printf("cleared picoev client \n");
   free(client);
-  printf("freed client \n");
+  //printf("freed client \n");
   free(chunk_val);
-  printf("cleared chunk val \n");
+  //printf("cleared chunk val \n");
   free(strm);
-  return;
+  //return;
 }
 
 void tms2bbox (client_t* cli) {
@@ -282,7 +292,7 @@ void send_conn (client_t* client)
         client->bbox.y1,
         client->bbox.x2,
         client->bbox.y2);
-    printf("%s\n", bbox_query);
+    //printf("%s\n", bbox_query);
     PQsendQueryParams(conn, 
                       bbox_query,
                       0,
@@ -386,10 +396,10 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
       goto CLOSE;
     }
     bboxcmp = memcmp(qval, qs_tms_tok, 3);
-    printf("%d bboxcmp\n", bboxcmp);
+    //printf("%d bboxcmp\n", bboxcmp);
     h_more = memcmp(qval, qs_end_tok, 6);
     if (!bboxcmp) {
-      printf("%s\n", qval);
+      //printf("%s\n", qval);
       qval = strtok(NULL, delims);
       while ((qval != NULL) && (tms_param_cnt <=3)) {
         switch (tms_param_cnt) {
@@ -428,10 +438,10 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
   client->fd = fd;
   client->loop = loop;
   printf("client fd: %d\n", fd);
-  printf("client bbox: %f, %f, %f, %f\n", client->bbox.x1, client->bbox.y1, client->bbox.x2, client->bbox.y2);
+  //printf("client bbox: %f, %f, %f, %f\n", client->bbox.x1, client->bbox.y1, client->bbox.x2, client->bbox.y2);
   printf("client tms: %d, %d, %d\n", client->tile.z, client->tile.x, client->tile.y);
   int dbfd = PQsocket(client->conn);
-  printf("\n\n\n\ndatabase fd: %d\n\n\n\n\n", dbfd);
+  //printf("\n\n\n\ndatabase fd: %d\n\n\n\n\n", dbfd);
   picoev_add(loop, dbfd, PICOEV_READ, 0, db_bin_cb, (void*)client);
   return;
 
