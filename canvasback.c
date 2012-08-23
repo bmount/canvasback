@@ -53,7 +53,14 @@ typedef unsigned char uint8;
 
 //char base_query[600] = "select st_asbinary(way) from planet_osm_line where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
 
-char base_query[600] = "select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
+//char base_query[600] = "select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
+
+char base_query[600] = "select \
+        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), lightsway)) \
+        from planet_osm_line where lightsway && \
+        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
+        and boundary is null and motorcar is null and route is null \
+        limit 3000;";
 
 //char base_query[600] = "select st_asbinary(way) from planet_osm_polygon where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
 
@@ -78,6 +85,7 @@ typedef struct {
   bbox_t bbox;
   tms_t tile;
   int pcount;
+  int dbfd;
   PGconn* conn;
   picoev_loop* loop;
 } client_t;
@@ -115,13 +123,16 @@ void fmt_res_bin (client_t* client) {
   PQclear(res);
   picoev_del(client->loop, client->fd);
   close(client->fd);
+  //picoev_del(client->loop, client->dbfd);
   free(client);
   free(chunk_val);
   return;
 }
 
 uint8_t scale (double coord, int zoom, int tile) {
-  return (uint8_t)(int)(
+  return (uint8_t)(
+  //return (uint8_t)(int)(
+      //(coord + 20037509) * (1 << zoom) / 156542.0 - (tile*256));
       (coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - (tile*256));
 }
 
@@ -261,9 +272,9 @@ void fmt_res_2shrt (client_t* client) {
   */
 
   char *rvstr = (char*)malloc(23);
-  sprintf(rvstr, "%x\r\n", pt_count*2);
+  sprintf(rvstr, "%x\r\n", pt_count*2 + ngeoms*8);
   s = write(client->fd, rvstr, strlen(rvstr));
-  s = write(client->fd, strm, pt_count*2);
+  s = write(client->fd, strm, pt_count*2 + ngeoms*8);
 
   printf("served tile: %d, %d, %d\n", client->tile.z, client->tile.x, client->tile.y);
   //
@@ -297,13 +308,14 @@ void tms2bbox (client_t* cli) {
 
 
 
-void send_conn (client_t* client) 
-{
+void send_conn (client_t* client) {
+  int rv;
   char bbox_query[500];
   PGconn *conn;
   PostgresPollingStatusType status;
   conn = PQconnectStart(connection_string);
   if (PQstatus(conn) == CONNECTION_BAD) {
+  client->conn = conn;
     return;
   } 
   else {
@@ -315,9 +327,13 @@ void send_conn (client_t* client)
         client->bbox.x1,
         client->bbox.y1,
         client->bbox.x2,
+        client->bbox.y2,
+        client->bbox.x1,
+        client->bbox.y1,
+        client->bbox.x2,
         client->bbox.y2);
     //printf("%s\n", bbox_query);
-    PQsendQueryParams(conn, 
+  rv = PQsendQueryParams(conn, 
                       bbox_query,
                       0,
                       NULL,
