@@ -134,21 +134,30 @@ void pump (client_t* client, uint8_t* data, int len) {
   printf("1/1 header %s\n", rvstr);
   printf("pump length %d\n", len);
   w = write(client->fd, rvstr, strlen(rvstr));
-  w = write(client->fd, (char*)data, len);
+  w = write(client->fd, data, len*2);
   free(rvstr);
 }
 
-void short_stream (client_t* client, double* coordbuf, uint8_t* strm, int pt_count, int idx) {
+void short_stream (client_t* client, double* coordbuf, uint8_t* strm, int pt_count, int idx, int ngeoms, uint32_t geom_t) {
   printf("hit shortstream\n");
   printf("pt_count %d\n", pt_count);
   int i;
-  for (i = 0; i <= pt_count; i += 2) {
-    strm[i] = scale(coordbuf[i], client->tile.z, client->tile.x);
-    printf("scaled pt %d: %d for tile %d\n", i, strm[i], client->tile.x);
-    strm[i+1] = scale(coordbuf[i+1], client->tile.z, client->tile.y);
-    printf("scaled pt %d: %d for tile %d\n", i+1, strm[i+1], client->tile.y);
+  uint32_t tval;
+  uint32_t* tbuf = &tval;
+  *tbuf = geom_t;
+  printf("forematter 1: %d\n", *tbuf);
+  memcpy(&strm[(idx*2) + 8*ngeoms], tbuf, 4);
+  printf("from buf: %d\n", *(uint32_t*)(&strm[(idx*2) + 8*ngeoms]));
+  *tbuf = (uint32_t)pt_count;
+  printf("forematter 2: %d\n", *tbuf);
+  memcpy(&strm[(idx*2) + 8*ngeoms + 4], tbuf, 4);
+  printf("from buf: %d\n", *(uint32_t*)(&strm[(idx*2) + 4 + 8*ngeoms]));
+  for (i = 0; i < (2 * (pt_count)); i += 2) {
+    strm[i + (idx*2) + 8 + 8*ngeoms] = scale(coordbuf[i], client->tile.z, client->tile.x);
+    printf("scaled pt %d: %d for tile %d\n", i, strm[i + (idx*2) + 8 + 8*ngeoms], client->tile.x);
+    strm[i + (idx*2) + 9 + 8*ngeoms] = scale(coordbuf[i+1], client->tile.z, client->tile.y);
+    printf("scaled pt %d: %d for tile %d\n", i+1, strm[i + (idx*2) + 9 + 8*ngeoms], client->tile.y);
   }
-  //pump(client, strm, pt_count * 2);
   return;
 }
 
@@ -174,18 +183,19 @@ void fmt_res_2shrt (client_t* client) {
   for (r = 0; r < num_rows; r++) {
     chunk_cnt += PQgetlength(res, r, 0);
   }
-  strm = (uint8_t*)malloc(chunk_cnt/8);
+  strm = (uint8_t*)malloc(chunk_cnt);
   int pt_count = 0;
   int geom_pos = 1; // skip first endianness flag
   int reslen;
   int idx = 1;
   int pts = 0;
+  int ngeoms = 0;
   uint32_t wkb_type;
   uint32_t linear_rings;
   double* coordv;
+  int total_linestrings = 0;
   for (r = 0; r < num_rows; r++) {
     geom_pos = 1;
-    pt_count = 0;
     pqres = (char*)PQgetvalue(res, r, 0);
     reslen = PQgetlength(res, r, 0);
     while (geom_pos < reslen) {
@@ -197,27 +207,31 @@ void fmt_res_2shrt (client_t* client) {
         geom_pos += idx;
         pts = 1;
         pt_count += pts;
-        short_stream(client, (double*)(&pqres[geom_pos]), strm, pts, 0);
+        //short_stream(client, (double*)(&pqres[geom_pos]), strm, pts, 0, 0, wkb_type);
+        ngeoms++;
       }
 
       else if (wkb_type == 2) {
+        total_linestrings++;
         pts = (int)(*(uint32_t*)(&pqres[geom_pos+4]));
         printf("correct pts %d\n", pts);
         coordv = (double*)(&pqres[geom_pos+8]);
         geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos + 4])) * 16 + 9);
-        short_stream(client, coordv, strm, pts, pt_count);
+        short_stream(client, coordv, strm, pts, pt_count, ngeoms, wkb_type);
         pt_count += pts;
+        ngeoms++;
       }
 
       else if (wkb_type == 3) {
+        ngeoms++;
         linear_rings = *(uint32_t*)(&pqres[geom_pos + 4]);
         //printf("linear rings: %d\n", linear_rings);
         geom_pos += 8;
         while (linear_rings) {
           pts = (int)(*(uint32_t*)(&pqres[geom_pos]));
-          pt_count += pts;
           coordv = (double*)(&pqres[geom_pos+4]);
-          short_stream(client, coordv, strm, pts, 0);
+          //short_stream(client, coordv, strm, pts, pt_count, 0, wkb_type);
+          pt_count += pts;
           printf("point count %d\n", pt_count);
           geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos])) * 16 + 4);
           linear_rings--;
@@ -230,6 +244,7 @@ void fmt_res_2shrt (client_t* client) {
         geom_pos += 9;
       }
     }
+    printf("total linestring: %d\n", total_linestrings);
   }
   //printf("point count: %d\n", pt_count);
 
@@ -240,11 +255,20 @@ void fmt_res_2shrt (client_t* client) {
   sprintf(chunk_val, "%x\r\n", chunk_cnt); 
   printf("reported length: %s", chunk_val);
   s = write(client->fd, chunk_val, strlen(chunk_val));
-  
   for (r = 0; r < num_rows; r++) {
     s = write(client->fd, PQgetvalue(res, r, 0), PQgetlength(res, r, 0));
   }
   */
+
+  char *rvstr = (char*)malloc(23);
+  sprintf(rvstr, "%x\r\n", pt_count*2);
+  s = write(client->fd, rvstr, strlen(rvstr));
+  s = write(client->fd, strm, pt_count*2);
+
+  printf("served tile: %d, %d, %d\n", client->tile.z, client->tile.x, client->tile.y);
+  //
+  //pump(client, strm, pt_count*2);
+  //s = write(client->fd, PQgetvalue(res, r, 0), PQgetlength(res, r, 0));
 
   s = write(client->fd, "\r\n0\r\n\r\n", 7);
   //printf("about to clear\n");
