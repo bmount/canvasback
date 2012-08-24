@@ -60,7 +60,7 @@ char base_query[600] = "select \
         from planet_osm_line where lightsway && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
         and boundary is null and motorcar is null and route is null \
-        limit 3000;";
+        limit 30000;";
 
 //char base_query[600] = "select st_asbinary(way) from planet_osm_polygon where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
 
@@ -133,7 +133,8 @@ uint8_t scale (double coord, int zoom, int tile) {
   return (uint8_t)(
   //return (uint8_t)(int)(
       //(coord + 20037509) * (1 << zoom) / 156542.0 - (tile*256));
-      (coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - (tile*256));
+      floor((coord + 20037508.342789) * (1 << zoom) / 157156.928179 - (tile*255)));
+      //(coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - (tile*255));
 }
 
 void pump (client_t* client, uint8_t* data, int len) {
