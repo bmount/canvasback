@@ -56,12 +56,14 @@ typedef unsigned char uint8;
 //char base_query[600] = "select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
 
 char base_query[600] = "select \
-        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), lightsway)) \
+        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), lightsway)), \
+        highway \
         from planet_osm_line where lightsway && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
-        and boundary is null and motorcar is null and route is null \
+        and highway is not null \
         limit 30000;";
 
+// and boundary is null and motorcar is null and route is null \
 //char base_query[600] = "select st_asbinary(way) from planet_osm_polygon where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
 
 typedef struct {
@@ -109,17 +111,32 @@ void pump (client_t* client, uint8_t* data, int len) {
   free(rvstr);
 }
 
-void short_stream (client_t* client, double* coordbuf, uint8_t* strm, int pt_count, int idx, int ngeoms, uint32_t geom_t) {
+
+//this should be the whole style ruleset in a sep file
+uint32_t osmstylenum (char* dbrv) {
+  if (!(strcmp(dbrv, "motorway"))) {
+    return 44;
+  } else {
+    return 22;
+  }
+}
+
+void short_stream (client_t* client, double* coordbuf, 
+        uint8_t* strm, int pt_count, 
+        int idx, int ngeoms, uint32_t geom_t, uint32_t osmtype) {
   int i;
   uint32_t tval;
   uint32_t* tbuf = &tval;
   *tbuf = geom_t;
-  memcpy(&strm[(idx*2) + 8*ngeoms], tbuf, 4);
+  memcpy(&strm[(idx*2) + 12*ngeoms], tbuf, 4);
   *tbuf = (uint32_t)pt_count;
-  memcpy(&strm[(idx*2) + 8*ngeoms + 4], tbuf, 4);
+  memcpy(&strm[(idx*2) + 12*ngeoms + 4], tbuf, 4);
+  *tbuf = osmtype;
+  memcpy(&strm[(idx*2) + 12*ngeoms + 8], tbuf, 4);
   for (i = 0; i < (2 * (pt_count)); i += 2) {
-    strm[i + (idx*2) + 8 + 8*ngeoms] = scale(coordbuf[i], client->tile.z, client->tile.x);
-    strm[i + (idx*2) + 9 + 8*ngeoms] = scale(coordbuf[i+1], client->tile.z, client->tile.y);
+    strm[i + (idx*2) + 12 + 12*ngeoms] = scale(coordbuf[i], client->tile.z, client->tile.x);
+    strm[i + (idx*2) + 13 + 12*ngeoms] = scale(coordbuf[i+1], client->tile.z, client->tile.y);
+    //strm[i + (idx*2) + 13 + 8*ngeoms] = osmtype;
   }
   return;
 }
@@ -129,6 +146,7 @@ void fmt_res_2shrt (client_t* client) {
   PGresult *res = PQgetResult(client->conn);
   uint8_t *strm;
   char *pqres;
+  char *osmt;
   int s, r, c, num_rows, num_cols;
   num_rows = PQntuples(res);
   num_cols = PQnfields(res);
@@ -162,6 +180,7 @@ void fmt_res_2shrt (client_t* client) {
   for (r = 0; r < num_rows; r++) {
     geom_pos = 1;
     pqres = (char*)PQgetvalue(res, r, 0);
+    osmt = (char*)PQgetvalue(res, r, 1);
     reslen = PQgetlength(res, r, 0);
     while (geom_pos < reslen) {
       wkb_type = *(uint32_t*)(&(pqres[geom_pos])); 
@@ -180,7 +199,8 @@ void fmt_res_2shrt (client_t* client) {
         pts = (int)(*(uint32_t*)(&pqres[geom_pos+4]));
         coordv = (double*)(&pqres[geom_pos+8]);
         geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos + 4])) * 16 + 9);
-        short_stream(client, coordv, strm, pts, pt_count, ngeoms, wkb_type);
+        short_stream(client, coordv, strm, pts, pt_count, ngeoms, wkb_type, 
+            osmstylenum(osmt));
         pt_count += pts;
         ngeoms++;
       }
@@ -207,9 +227,9 @@ void fmt_res_2shrt (client_t* client) {
   }
 
   char *rvstr = (char*)malloc(23);
-  sprintf(rvstr, "%x\r\n", pt_count*2 + ngeoms*8);
+  sprintf(rvstr, "%x\r\n", pt_count*2 + ngeoms*12); // add 4 bytes for osmstyle
   s = write(client->fd, rvstr, strlen(rvstr));
-  s = write(client->fd, strm, pt_count*2 + ngeoms*8);
+  s = write(client->fd, strm, pt_count*2 + ngeoms*12);
 
 
   s = write(client->fd, "\r\n0\r\n\r\n", 7);
