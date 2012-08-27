@@ -142,7 +142,7 @@ void fmt_res_2shrt (client_t* client) {
     picoev_del(client->loop, client->dbfd);
     close(client->fd);
     free(client);
-    //free(chunk_val);
+    free(chunk_val);
     return;
   }
   for (r = 0; r < num_rows; r++) {
@@ -220,6 +220,7 @@ void fmt_res_2shrt (client_t* client) {
   picoev_del(client->loop, client->dbfd);
   free(client);
   free(chunk_val);
+  free(rvstr);
   free(strm);
   return;
 }
@@ -401,7 +402,7 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
   client->loop = loop;
   int dbfd = PQsocket(client->conn);
   client->dbfd = dbfd;
-  picoev_add(loop, dbfd, PICOEV_READ, 0, db_bin_cb, (void*)client);
+  picoev_add(loop, client->dbfd, PICOEV_READ, 0, db_bin_cb, (void*)client);
   return;
 
  CLOSE:
