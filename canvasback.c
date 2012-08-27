@@ -91,44 +91,6 @@ typedef struct {
 } client_t;
 
 
-void fmt_res_bin (client_t* client) {
-  PGresult *res = PQgetResult(client->conn);
-  int s, r, c, num_rows, num_cols;
-  num_rows = PQntuples(res);
-  num_cols = PQnfields(res);
-  int chunk_cnt = 0;
-  if (num_rows > 0) {
-    printf("num_rows %d\n", num_rows);
-  }
-  char* chunk_val = (char*)malloc(23);
-  if (num_rows <= 0) {
-    s = write(client->fd, "0\r\n\r\n", 5);
-    PQclear(res);
-    picoev_del(client->loop, client->fd);
-    close(client->fd);
-    free(client);
-    free(chunk_val);
-    return;
-  }
-  for (r = 0; r < num_rows; r++) {
-    chunk_cnt += PQgetlength(res, r, 0); 
-  }
-  sprintf(chunk_val, "%x\r\n", chunk_cnt); 
-  printf("reported length: %s", chunk_val);
-  s = write(client->fd, chunk_val, strlen(chunk_val));
-  for (r = 0; r < num_rows; r++) {
-    s = write(client->fd, PQgetvalue(res, r, 0), PQgetlength(res, r, 0));
-  }
-  s = write(client->fd, "\r\n0\r\n\r\n", 7);
-  PQclear(res);
-  picoev_del(client->loop, client->fd);
-  close(client->fd);
-  //picoev_del(client->loop, client->dbfd);
-  free(client);
-  free(chunk_val);
-  return;
-}
-
 uint8_t scale (double coord, int zoom, int tile) {
   return (uint8_t)(
   //return (uint8_t)(int)(
@@ -138,37 +100,26 @@ uint8_t scale (double coord, int zoom, int tile) {
 }
 
 void pump (client_t* client, uint8_t* data, int len) {
-  printf("hit pump\n");
   int w, i;
   int shortlen = 0;
   char *rvstr = (char*)malloc(23);
   sprintf(rvstr, "%x\r\n", len*2);
-  printf("1/1 header %s\n", rvstr);
-  printf("pump length %d\n", len);
   w = write(client->fd, rvstr, strlen(rvstr));
   w = write(client->fd, data, len*2);
   free(rvstr);
 }
 
 void short_stream (client_t* client, double* coordbuf, uint8_t* strm, int pt_count, int idx, int ngeoms, uint32_t geom_t) {
-  printf("hit shortstream\n");
-  printf("pt_count %d\n", pt_count);
   int i;
   uint32_t tval;
   uint32_t* tbuf = &tval;
   *tbuf = geom_t;
-  printf("forematter 1: %d\n", *tbuf);
   memcpy(&strm[(idx*2) + 8*ngeoms], tbuf, 4);
-  printf("from buf: %d\n", *(uint32_t*)(&strm[(idx*2) + 8*ngeoms]));
   *tbuf = (uint32_t)pt_count;
-  printf("forematter 2: %d\n", *tbuf);
   memcpy(&strm[(idx*2) + 8*ngeoms + 4], tbuf, 4);
-  printf("from buf: %d\n", *(uint32_t*)(&strm[(idx*2) + 4 + 8*ngeoms]));
   for (i = 0; i < (2 * (pt_count)); i += 2) {
     strm[i + (idx*2) + 8 + 8*ngeoms] = scale(coordbuf[i], client->tile.z, client->tile.x);
-    printf("scaled pt %d: %d for tile %d\n", i, strm[i + (idx*2) + 8 + 8*ngeoms], client->tile.x);
     strm[i + (idx*2) + 9 + 8*ngeoms] = scale(coordbuf[i+1], client->tile.z, client->tile.y);
-    printf("scaled pt %d: %d for tile %d\n", i+1, strm[i + (idx*2) + 9 + 8*ngeoms], client->tile.y);
   }
   return;
 }
@@ -186,10 +137,12 @@ void fmt_res_2shrt (client_t* client) {
   if (num_rows <= 0) {
     s = write(client->fd, "0\r\n\r\n", 5);
     PQclear(res);
+    PQfinish(client->conn);
     picoev_del(client->loop, client->fd);
+    picoev_del(client->loop, client->dbfd);
     close(client->fd);
     free(client);
-    free(chunk_val);
+    //free(chunk_val);
     return;
   }
   for (r = 0; r < num_rows; r++) {
@@ -212,7 +165,6 @@ void fmt_res_2shrt (client_t* client) {
     reslen = PQgetlength(res, r, 0);
     while (geom_pos < reslen) {
       wkb_type = *(uint32_t*)(&(pqres[geom_pos])); 
-      printf("geom type: %d\n", wkb_type);
 
       if (wkb_type == 1) {
         idx = 17;
@@ -226,7 +178,6 @@ void fmt_res_2shrt (client_t* client) {
       else if (wkb_type == 2) {
         total_linestrings++;
         pts = (int)(*(uint32_t*)(&pqres[geom_pos+4]));
-        printf("correct pts %d\n", pts);
         coordv = (double*)(&pqres[geom_pos+8]);
         geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos + 4])) * 16 + 9);
         short_stream(client, coordv, strm, pts, pt_count, ngeoms, wkb_type);
@@ -237,14 +188,12 @@ void fmt_res_2shrt (client_t* client) {
       else if (wkb_type == 3) {
         ngeoms++;
         linear_rings = *(uint32_t*)(&pqres[geom_pos + 4]);
-        //printf("linear rings: %d\n", linear_rings);
         geom_pos += 8;
         while (linear_rings) {
           pts = (int)(*(uint32_t*)(&pqres[geom_pos]));
           coordv = (double*)(&pqres[geom_pos+4]);
           //short_stream(client, coordv, strm, pts, pt_count, 0, wkb_type);
           pt_count += pts;
-          printf("point count %d\n", pt_count);
           geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos])) * 16 + 4);
           linear_rings--;
         }
@@ -252,51 +201,27 @@ void fmt_res_2shrt (client_t* client) {
         //break;
       }
       else {
-        printf("\n\n\n\nhit collection \n\n\n\n\n");
         geom_pos += 9;
       }
     }
-    printf("total linestring: %d\n", total_linestrings);
   }
-  //printf("point count: %d\n", pt_count);
-
-  /*
-  for (r = 0; r < num_rows; r++) {
-    chunk_cnt += PQgetlength(res, r, 0); 
-  }
-  sprintf(chunk_val, "%x\r\n", chunk_cnt); 
-  printf("reported length: %s", chunk_val);
-  s = write(client->fd, chunk_val, strlen(chunk_val));
-  for (r = 0; r < num_rows; r++) {
-    s = write(client->fd, PQgetvalue(res, r, 0), PQgetlength(res, r, 0));
-  }
-  */
 
   char *rvstr = (char*)malloc(23);
   sprintf(rvstr, "%x\r\n", pt_count*2 + ngeoms*8);
   s = write(client->fd, rvstr, strlen(rvstr));
   s = write(client->fd, strm, pt_count*2 + ngeoms*8);
 
-  printf("served tile: %d, %d, %d\n", client->tile.z, client->tile.x, client->tile.y);
-  //
-  //pump(client, strm, pt_count*2);
-  //s = write(client->fd, PQgetvalue(res, r, 0), PQgetlength(res, r, 0));
 
   s = write(client->fd, "\r\n0\r\n\r\n", 7);
-  //printf("about to clear\n");
   PQclear(res);
-  //printf("cleared \n");
-  //PQfinish(client->conn);
+  PQfinish(client->conn);
   close(client->fd);
-  //printf("close client fd \n");
   picoev_del(client->loop, client->fd);
-  //printf("cleared picoev client \n");
+  picoev_del(client->loop, client->dbfd);
   free(client);
-  //printf("freed client \n");
   free(chunk_val);
-  //printf("cleared chunk val \n");
   free(strm);
-  //return;
+  return;
 }
 
 void tms2bbox (client_t* cli) {
@@ -333,7 +258,6 @@ void send_conn (client_t* client) {
         client->bbox.y1,
         client->bbox.x2,
         client->bbox.y2);
-    //printf("%s\n", bbox_query);
   rv = PQsendQueryParams(conn, 
                       bbox_query,
                       0,
@@ -437,10 +361,8 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
       goto CLOSE;
     }
     bboxcmp = memcmp(qval, qs_tms_tok, 3);
-    //printf("%d bboxcmp\n", bboxcmp);
     h_more = memcmp(qval, qs_end_tok, 6);
     if (!bboxcmp) {
-      //printf("%s\n", qval);
       qval = strtok(NULL, delims);
       while ((qval != NULL) && (tms_param_cnt <=3)) {
         switch (tms_param_cnt) {
@@ -456,7 +378,6 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
     }
 
     else {
-      //printf("%s\n", qval);
       if (!h_more) {
         break;
       } else {
@@ -478,16 +399,12 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
   send_conn(client);
   client->fd = fd;
   client->loop = loop;
-  printf("client fd: %d\n", fd);
-  //printf("client bbox: %f, %f, %f, %f\n", client->bbox.x1, client->bbox.y1, client->bbox.x2, client->bbox.y2);
-  printf("client tms: %d, %d, %d\n", client->tile.z, client->tile.x, client->tile.y);
   int dbfd = PQsocket(client->conn);
-  //printf("\n\n\n\ndatabase fd: %d\n\n\n\n\n", dbfd);
+  client->dbfd = dbfd;
   picoev_add(loop, dbfd, PICOEV_READ, 0, db_bin_cb, (void*)client);
   return;
 
  CLOSE:
-  printf("hit close\n\n\n\n");
   picoev_del(loop, fd);
   close(fd);
   free(client);
