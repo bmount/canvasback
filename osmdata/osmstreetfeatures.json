@@ -1,0 +1,38 @@
+'{"0": "abandoned", "1": "bridleway", "2": "construction", "3": "crossing", "4": "cycleway", "5": "footway", "6": "footway_unconstructed", "7": "living_street", "8": "motorway", "9": "motorway_link", "10": "path", "11": "pedestrian", "12": "platform", "13": "primary", "14": "primary_link", "15": "proposed", "16": "raceway", "17": "residential", "18": "road", "19": "secondary", "20": "secondary_link", "21": "service", "22": "service; residential", "23": "steps", "24": "tertiary", "25": "tertiary_link", "26": "track", "27": "trunk", "28": "trunk_link", "29": "unclassified"}'
+
+/*
+ *
+
+{0: 'abandoned',
+ 1: 'bridleway',
+ 2: 'construction',
+ 3: 'crossing',
+ 4: 'cycleway',
+ 5: 'footway',
+ 6: 'footway_unconstructed',
+ 7: 'living_street',
+ 8: 'motorway',
+ 9: 'motorway_link',
+ 10: 'path',
+ 11: 'pedestrian',
+ 12: 'platform',
+ 13: 'primary',
+ 14: 'primary_link',
+ 15: 'proposed',
+ 16: 'raceway',
+ 17: 'residential',
+ 18: 'road',
+ 19: 'secondary',
+ 20: 'secondary_link',
+ 21: 'service',
+ 22: 'service; residential',
+ 23: 'steps',
+ 24: 'tertiary',
+ 25: 'tertiary_link',
+ 26: 'track',
+ 27: 'trunk',
+ 28: 'trunk_link',
+ 29: 'unclassified'}
+
+ *
+ */

@@ -15,6 +15,7 @@
 #include <math.h>
 #include "picoev/picoev.h"
 #include "picohttpparser/picohttpparser.h"
+#include "osmstyles.h"
 #include "db.conf.c"
 
 
@@ -32,28 +33,11 @@ typedef unsigned char uint8;
    working on binary branch, default behavior here. Use fmt_res_bin and db_bin_cb as callback
    query should return wkb (postgis st_asbinary) as only column
 
-  For geojson: use a fmt_res_geojson and db_geojson_bin as callback 
-  with a query like this (geometry first, everything else will be properties):
+char base_query[600] = "select st_asbinary(way) from planet_osm_line where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
 
-  Example geometry-only query:
-   
-  char base_query[600] = "select st_asgeojson(st_transform(way, 4326)) from planet_osm_roads where way && st_envelope(st_transform(st_geomfromtext('linestring(%f %f,%f %f)', 4326), 900913)) limit 30;";
-
-   All fields besides the geometry as properties:
-
-    char base_query[600] = "select st_asgeojson(way), * from planet_osm_roads where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326)) limit 30;";
-
+char base_query[600] = "select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
 
 */
-
-
-//char base_query[600] = "select st_asbinary(sway) from planet_osm_roads where sway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
-
-//char base_query[600] = "select st_asbinary(sway) from planet_osm_roads where sway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
-
-//char base_query[600] = "select st_asbinary(way) from planet_osm_line where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
-
-//char base_query[600] = "select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
 
 char base_query[600] = "select \
         st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), lightsway)), \
@@ -64,7 +48,6 @@ char base_query[600] = "select \
         limit 30000;";
 
 // and boundary is null and motorcar is null and route is null \
-//char base_query[600] = "select st_asbinary(way) from planet_osm_polygon where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
 
 typedef struct {
   double x1;
@@ -112,15 +95,6 @@ void pump (client_t* client, uint8_t* data, int len) {
 }
 
 
-//this should be the whole style ruleset in a sep file
-uint32_t osmstylenum (char* dbrv) {
-  if (!(strcmp(dbrv, "motorway"))) {
-    return 44;
-  } else {
-    return 22;
-  }
-}
-
 void short_stream (client_t* client, double* coordbuf, 
         uint8_t* strm, int pt_count, 
         int idx, int ngeoms, uint32_t geom_t, uint32_t osmtype) {
@@ -142,7 +116,7 @@ void short_stream (client_t* client, double* coordbuf,
 }
 
 
-void fmt_res_2shrt (client_t* client) {
+void fmt_res_bin (client_t* client) {
   PGresult *res = PQgetResult(client->conn);
   uint8_t *strm;
   char *pqres;
@@ -309,7 +283,7 @@ int PQsendQueryParams(PGconn *conn,
 void db_bin_cb (picoev_loop* loop, int fd, int revents, void* cb_arg)
 {
   client_t* client = (client_t*)cb_arg;
-  fmt_res_2shrt(client);
+  fmt_res_bin(client);
   return;
 }
 
