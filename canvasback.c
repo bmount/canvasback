@@ -33,11 +33,12 @@ typedef unsigned char uint8;
    working on binary branch, default behavior here. Use fmt_res_bin and db_bin_cb as callback
    query should return wkb (postgis st_asbinary) as only column
 
-char base_query[600] = "select st_asbinary(way) from planet_osm_line where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
+char base_query[600] = "select st_asbinary(way) from planet_osm_polygon where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
 
 char base_query[600] = "select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
 
-*/
+
+
 
 char base_query[600] = "select \
         st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), lightsway)), \
@@ -45,6 +46,25 @@ char base_query[600] = "select \
         from planet_osm_line where lightsway && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
         and highway is not null \
+        limit 30000;";
+
+
+
+
+char base_query[600] = "select \
+        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
+        highway \
+        from planet_osm_polygon where way && \
+        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
+        limit 30000;";
+
+*/
+
+char base_query[600] = "select \
+        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), wkb_geometry)), \
+        scalerank \
+        from ne_10m_geography_regions_polys where wkb_geometry && \
+        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
         limit 30000;";
 
 // and boundary is null and motorcar is null and route is null \
@@ -77,6 +97,8 @@ typedef struct {
 
 
 uint8_t scale (double coord, int zoom, int tile) {
+  
+  //printf("scaled %d %d\n", tile, (uint8_t)floor((coord + 20037508.342789) * (1 << zoom) / 157156.928179 - (tile*255)));
   return (uint8_t)(
   //return (uint8_t)(int)(
       //(coord + 20037509) * (1 << zoom) / 156542.0 - (tile*256));
@@ -180,16 +202,19 @@ void fmt_res_bin (client_t* client) {
       }
 
       else if (wkb_type == 3) {
-        ngeoms++;
+        //ngeoms++; leaving this here as reminder about stupid bugs
         linear_rings = *(uint32_t*)(&pqres[geom_pos + 4]);
+        //printf("%d linear rings\n", linear_rings);
         geom_pos += 8;
         while (linear_rings) {
           pts = (int)(*(uint32_t*)(&pqres[geom_pos]));
           coordv = (double*)(&pqres[geom_pos+4]);
-          //short_stream(client, coordv, strm, pts, pt_count, 0, wkb_type);
+          short_stream(client, coordv, strm, pts, pt_count, ngeoms, wkb_type, 
+              5); // no reason not to style in osmstyles.h
           pt_count += pts;
           geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos])) * 16 + 4);
           linear_rings--;
+          ngeoms++;
         }
         geom_pos += 1;
         //break;
@@ -219,6 +244,7 @@ void fmt_res_bin (client_t* client) {
   return;
 }
 
+/*
 void tms2bbox (client_t* cli) {
   cli->bbox.x1 = (cli->tile.x * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278);
   cli->bbox.x2 = ((cli->tile.x + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278);
@@ -226,8 +252,16 @@ void tms2bbox (client_t* cli) {
   cli->bbox.y2 = ((cli->tile.y) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278);
   return;
 }
+*/
 
-
+void tms2bbox (client_t* cli) {
+  cli->bbox.x1 = (cli->tile.x * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + .1);
+  cli->bbox.x2 = ((cli->tile.x + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - .1);
+  cli->bbox.y1 = ((cli->tile.y - 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + .1);
+  cli->bbox.y2 = ((cli->tile.y) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - .1);
+  //printf("bbox %f %f %f %f \n", cli->bbox.x1, cli->bbox.y1, cli->bbox.x2, cli->bbox.y2);
+  return;
+}
 
 void send_conn (client_t* client) {
   int rv;
