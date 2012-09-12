@@ -38,8 +38,6 @@ char base_query[600] = "select st_asbinary(way) from planet_osm_polygon where wa
 char base_query[600] = "select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
 
 
-
-
 char base_query[600] = "select \
         st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), lightsway)), \
         highway \
@@ -53,20 +51,63 @@ char base_query[600] = "select \
 
 char base_query[600] = "select \
         st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
-        highway \
+        osm_id \
         from planet_osm_polygon where way && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
         limit 30000;";
 
+
+        and highway is not null and highway != 'residential' \
+
 */
+char highz[600] = "select \
+        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
+        highway \
+        from planet_osm_line where way && \
+        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
+        and highway is not null \
+        limit 30000;";
+
+char lowz[600] = "select \
+        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
+        highway \
+        from planet_osm_line where way && \
+        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
+        and highway = 'primary' \
+        limit 30000;";
+
+char midz[600] = "select \
+        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
+        highway \
+        from planet_osm_line where way && \
+        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
+        and highway = 'secondary' \
+        limit 30000;";
+
+/*
+        and highway is not null and highway != 'residential' \
+        ne_10m_geography_regions_polys \
+        ne_10m_coastline \
+
 
 char base_query[600] = "select \
         st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), wkb_geometry)), \
         scalerank \
-        from ne_10m_geography_regions_polys where wkb_geometry && \
+        from \
+        ne_10m_coastline \
+        where wkb_geometry && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
         limit 30000;";
 
+char base_query[600] = "select \
+        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), wkb_geometry)), \
+        maxheight \
+        from \
+        building_footprint \
+        where wkb_geometry && \
+        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
+        limit 30000;";
+*/
 // and boundary is null and motorcar is null and route is null \
 
 typedef struct {
@@ -95,27 +136,10 @@ typedef struct {
   picoev_loop* loop;
 } client_t;
 
-
 uint8_t scale (double coord, int zoom, int tile) {
-  
-  //printf("scaled %d %d\n", tile, (uint8_t)floor((coord + 20037508.342789) * (1 << zoom) / 157156.928179 - (tile*255)));
   return (uint8_t)(
-  //return (uint8_t)(int)(
-      //(coord + 20037509) * (1 << zoom) / 156542.0 - (tile*256));
       floor((coord + 20037508.342789) * (1 << zoom) / 157156.928179 - (tile*255)));
-      //(coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - (tile*255));
 }
-
-void pump (client_t* client, uint8_t* data, int len) {
-  int w, i;
-  int shortlen = 0;
-  char *rvstr = (char*)malloc(23);
-  sprintf(rvstr, "%x\r\n", len*2);
-  w = write(client->fd, rvstr, strlen(rvstr));
-  w = write(client->fd, data, len*2);
-  free(rvstr);
-}
-
 
 void short_stream (client_t* client, double* coordbuf, 
         uint8_t* strm, int pt_count, 
@@ -136,7 +160,6 @@ void short_stream (client_t* client, double* coordbuf,
   }
   return;
 }
-
 
 void fmt_res_bin (client_t* client) {
   PGresult *res = PQgetResult(client->conn);
@@ -253,18 +276,29 @@ void tms2bbox (client_t* cli) {
   return;
 }
 */
-
+/*
+ * For cases where geom right up against the edge could be cast to something
+ * outside 0-255
+ */
 void tms2bbox (client_t* cli) {
-  cli->bbox.x1 = (cli->tile.x * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + .1);
-  cli->bbox.x2 = ((cli->tile.x + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - .1);
-  cli->bbox.y1 = ((cli->tile.y - 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + .1);
-  cli->bbox.y2 = ((cli->tile.y) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - .1);
+  cli->bbox.x1 = (cli->tile.x * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + .01);
+  cli->bbox.x2 = ((cli->tile.x + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - .01);
+  cli->bbox.y1 = ((cli->tile.y - 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + .01);
+  cli->bbox.y2 = ((cli->tile.y) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - .01);
   //printf("bbox %f %f %f %f \n", cli->bbox.x1, cli->bbox.y1, cli->bbox.x2, cli->bbox.y2);
   return;
 }
 
 void send_conn (client_t* client) {
   int rv;
+  char* tquery;
+  if (client->tile.z < 10) {
+    tquery = lowz;
+  } else if (client->tile.z < 13) {
+    tquery = midz;
+  } else {
+    tquery = highz;
+  }
   char bbox_query[500];
   PGconn *conn;
   PostgresPollingStatusType status;
@@ -278,7 +312,7 @@ void send_conn (client_t* client) {
       status = PQconnectPoll(conn);
     } while (status != PGRES_POLLING_FAILED &&
              status != PGRES_POLLING_OK);
-    sprintf(bbox_query, base_query, 
+    sprintf(bbox_query, tquery, 
         client->bbox.x1,
         client->bbox.y1,
         client->bbox.x2,
