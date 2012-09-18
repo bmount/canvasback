@@ -7,17 +7,14 @@ feasibility of this implementation of some of the basics.
 
 ## the current master branch
 
-is now using an experimental data format. For original Well-Known Binary implementation, see the `wellknownbinary` tag. This new thing (unknown binary?) is just:
+is now using an experimental data format. For original Well-Known Binary implementation, see the `wellknownbinary` tag. This new thing (unknown binary?) is something like:
 
-`
+<pre>
 uint32 geometry_type // same as wkb
-
 uint32 num_pts // basically like wkb
-
-uint32 osm_type // just based on highway taxonomy
-
+uint32 osm_type // based on highway taxonomy, not required
 uint8[num_pts] // wat
-`
+</pre>
 
 The last bit takes advantage of the fact that tile maps are so commonly 256 px
  wide, if you scale the geometry on the way out to be the offset from the tile
