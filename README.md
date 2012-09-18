@@ -11,8 +11,11 @@ is now using an experimental data format. For original Well-Known Binary impleme
 
 `
 uint32 geometry_type // same as wkb
+
 uint32 num_pts // basically like wkb
+
 uint32 osm_type // just based on highway taxonomy
+
 uint8[num_pts] // wat
 `
 
