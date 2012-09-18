@@ -8,6 +8,6 @@ int max_query_index = 1;
 
 //const char *connection_string = "dbname=nedata host=/tmp";
 //const char *connection_string = "dbname=sfcollection host=/tmp";
-const char *connection_string = "dbname=nyosm host=/tmp";
-//const char *connection_string = "dbname=calosm host=/tmp";
+//const char *connection_string = "dbname=nyosm host=/tmp";
+const char *connection_string = "dbname=calosm host=/tmp";
 //const char *connection_string = "dbname=buildingfootprints host=/tmp";

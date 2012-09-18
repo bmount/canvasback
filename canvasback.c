@@ -21,7 +21,7 @@
 
 #define PORT 7987
 #define MAX_FDS 100000
-#define TIMEOUT_SECS 10
+#define TIMEOUT_SECS 19
 
 #define EARTH 6378137
 
@@ -81,10 +81,11 @@ char midz[600] = "select \
         highway \
         from planet_osm_line where way && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
-        and highway = 'secondary' \
         limit 30000;";
 
-/*
+/*    for midz:
+        and highway = 'secondary' \
+      elsewhere:
         and highway is not null and highway != 'residential' \
         ne_10m_geography_regions_polys \
         ne_10m_coastline \
