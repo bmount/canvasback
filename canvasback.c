@@ -69,19 +69,35 @@ char highz[600] = "select \
         limit 30000;";
 
 char lowz[600] = "select \
-        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
-        highway \
-        from planet_osm_line where way && \
+        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), wkb_geometry)), \
+        1 \
+        from ne_10m_coastline where wkb_geometry && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
-        and highway = 'primary' \
         limit 30000;";
 
 char midz[600] = "select \
         st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
         highway \
-        from planet_osm_line where way && \
+        from planet_osm_roads where way && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
-        limit 30000;";
+        and highway is not null \
+        limit 3000;";
+
+char simpmidz[600] = "select \
+        st_asbinary(st_simplify( \
+            ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way), .01)), \
+        highway \
+        from planet_osm_roads where way && \
+        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
+        and highway is not null \
+        limit 3000;";
+
+char streetz[600] = "select \
+        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), mercgeom)), \
+        round(height) \
+        from sfbldgs where mercgeom && \
+        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
+        limit 3000;";
 
 /*    for midz:
         and highway = 'secondary' \
@@ -89,7 +105,8 @@ char midz[600] = "select \
         and highway is not null and highway != 'residential' \
         ne_10m_geography_regions_polys \
         ne_10m_coastline \
-
+//
+        and highway is not null \
 
 char base_query[600] = "select \
         st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), wkb_geometry)), \
@@ -157,7 +174,6 @@ void short_stream (client_t* client, double* coordbuf,
   for (i = 0; i < (2 * (pt_count)); i += 2) {
     strm[i + (idx*2) + 12 + 12*ngeoms] = scale(coordbuf[i], client->tile.z, client->tile.x);
     strm[i + (idx*2) + 13 + 12*ngeoms] = scale(coordbuf[i+1], client->tile.z, client->tile.y);
-    //strm[i + (idx*2) + 13 + 8*ngeoms] = osmtype;
   }
   return;
 }
@@ -282,38 +298,51 @@ void tms2bbox (client_t* cli) {
  * outside 0-255
  */
 void tms2bbox (client_t* cli) {
-  cli->bbox.x1 = (cli->tile.x * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + .01);
-  cli->bbox.x2 = ((cli->tile.x + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - .01);
-  cli->bbox.y1 = ((cli->tile.y - 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + .01);
-  cli->bbox.y2 = ((cli->tile.y) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - .01);
+  double edge_err;
+  edge_err = (cli->tile.z >= 18)? .00001: .01;
+  cli->bbox.x1 = (cli->tile.x * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + edge_err);
+  cli->bbox.x2 = ((cli->tile.x + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - edge_err);
+  cli->bbox.y1 = ((cli->tile.y - 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + edge_err);
+  cli->bbox.y2 = ((cli->tile.y) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - edge_err);
   //printf("bbox %f %f %f %f \n", cli->bbox.x1, cli->bbox.y1, cli->bbox.x2, cli->bbox.y2);
   return;
 }
 
 void send_conn (client_t* client) {
   int rv;
-  char* tquery;
-  if (client->tile.z < 10) {
-    tquery = lowz;
-  } else if (client->tile.z < 13) {
-    tquery = midz;
-  } else {
-    tquery = highz;
+  //char* tquery;
+  char *tquery = (char*)malloc(600);
+  if (client->tile.z < 9) {
+    //tquery = lowz;
+    memcpy(tquery,lowz,600);
   }
-  char bbox_query[500];
+  else if (client->tile.z < 11) {
+    memcpy(tquery,simpmidz,600);
+  } else if (client->tile.z < 12) {
+    //tquery = midz;
+    memcpy(tquery,midz,600);
+  } else if (client->tile.z < 16) {
+    //tquery = highz;
+    memcpy(tquery,highz,600);
+  } else {
+    memcpy(tquery,streetz,600);
+    //tquery = streetz;
+  }
+  //char bbox_query[600];
+  char* bbox_query = (char*)malloc(600);
   PGconn *conn;
   PostgresPollingStatusType status;
   conn = PQconnectStart(connection_string);
   if (PQstatus(conn) == CONNECTION_BAD) {
   client->conn = conn;
     return;
-  } 
+  }
   else {
     do {
       status = PQconnectPoll(conn);
     } while (status != PGRES_POLLING_FAILED &&
              status != PGRES_POLLING_OK);
-    sprintf(bbox_query, tquery, 
+    sprintf(bbox_query, tquery,
         client->bbox.x1,
         client->bbox.y1,
         client->bbox.x2,
@@ -322,7 +351,7 @@ void send_conn (client_t* client) {
         client->bbox.y1,
         client->bbox.x2,
         client->bbox.y2);
-  rv = PQsendQueryParams(conn, 
+  rv = PQsendQueryParams(conn,
                       bbox_query,
                       0,
                       NULL,
@@ -332,6 +361,8 @@ void send_conn (client_t* client) {
                       1);
   }
   client->conn = conn;
+  free(bbox_query);
+  free(tquery);
   return;
 }
 
