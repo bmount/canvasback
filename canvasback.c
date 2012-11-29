@@ -316,9 +316,9 @@ void send_conn (client_t* client) {
     //tquery = lowz;
     memcpy(tquery,lowz,600);
   }
-  else if (client->tile.z < 11) {
+  else if (client->tile.z < 9) {
     memcpy(tquery,simpmidz,600);
-  } else if (client->tile.z < 12) {
+  } else if (client->tile.z < 13) {
     //tquery = midz;
     memcpy(tquery,midz,600);
   } else if (client->tile.z < 16) {
