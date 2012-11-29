@@ -28,38 +28,12 @@
 unsigned short port = PORT;
 int listen_sock;
 
-/* 
-typedef unsigned char uint8;
-   working on binary branch, default behavior here. Use fmt_res_bin and db_bin_cb as callback
-   query should return wkb (postgis st_asbinary) as only column
-
-char base_query[600] = "select st_asbinary(way) from planet_osm_polygon where way && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 4326));";
-
-char base_query[600] = "select st_asbinary(lightsway) from planet_osm_line where lightsway && st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) and boundary is null;";
-
-
-char base_query[600] = "select \
-        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), lightsway)), \
-        highway \
-        from planet_osm_line where lightsway && \
-        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
-        and highway is not null \
-        limit 30000;";
-
-
-
-
-char base_query[600] = "select \
-        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
-        osm_id \
-        from planet_osm_polygon where way && \
-        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
-        limit 30000;";
-
-
-        and highway is not null and highway != 'residential' \
-
+/*
+   Working on binary branch, default behavior here. Use fmt_res_bin and db_bin_cb as callback.
+   Query should return wkb (postgis st_asbinary) as first column, and another integer
+   (ie osm type, height, some id) as second column.
 */
+
 char highz[600] = "select \
         st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
         highway \
@@ -99,34 +73,7 @@ char streetz[600] = "select \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
         limit 3000;";
 
-/*    for midz:
-        and highway = 'secondary' \
-      elsewhere:
-        and highway is not null and highway != 'residential' \
-        ne_10m_geography_regions_polys \
-        ne_10m_coastline \
-//
-        and highway is not null \
-
-char base_query[600] = "select \
-        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), wkb_geometry)), \
-        scalerank \
-        from \
-        ne_10m_coastline \
-        where wkb_geometry && \
-        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
-        limit 30000;";
-
-char base_query[600] = "select \
-        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), wkb_geometry)), \
-        maxheight \
-        from \
-        building_footprint \
-        where wkb_geometry && \
-        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
-        limit 30000;";
-*/
-// and boundary is null and motorcar is null and route is null \
+// and boundary is null and motorcar is null and route is null etc
 
 typedef struct {
   double x1;
@@ -285,18 +232,11 @@ void fmt_res_bin (client_t* client) {
 }
 
 /*
-void tms2bbox (client_t* cli) {
-  cli->bbox.x1 = (cli->tile.x * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278);
-  cli->bbox.x2 = ((cli->tile.x + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278);
-  cli->bbox.y1 = ((cli->tile.y - 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278);
-  cli->bbox.y2 = ((cli->tile.y) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278);
-  return;
-}
-*/
-/*
- * For cases where geom right up against the edge could be cast to something
- * outside 0-255
+ * Edge error for cases where geom right up against the edge could be cast to something
+ * outside 0-255. Query should be `contains completely` then another one with
+ * `intersects boundary line`
  */
+
 void tms2bbox (client_t* cli) {
   double edge_err;
   edge_err = (cli->tile.z >= 18)? .00001: .01;
@@ -310,6 +250,7 @@ void tms2bbox (client_t* cli) {
 
 void send_conn (client_t* client) {
   int rv;
+  // insufficient understanding of when pointing to string v copying is necessary
   //char* tquery;
   char *tquery = (char*)malloc(600);
   if (client->tile.z < 9) {
@@ -398,8 +339,8 @@ static void setup_sock(int fd)
   assert(r == 0);
 }
 
-/* you would think
-void parse_bbox_qs (char* qs, client_t* client)
+/* should have something like
+void parse_bbox_qs (char* qs, client_t* client);
 */
 
 void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
@@ -433,7 +374,7 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
 #define RES_HEAD "HTTP/1.1 200 OK\r\n" \
     "Content-Type: application/octet-stream\r\n" \
     "Transfer-Encoding: chunked\r\n" \
-    "\r\n" 
+    "\r\n"
 
   r = write(fd, RES_HEAD, sizeof(RES_HEAD) - 1);
 #undef RES_HEAD
@@ -441,7 +382,7 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
   const char* delims = "&/?,=. ";
   char* qs_tms_tok = "tms";
   char* qs_end_tok = "HTTP/1";
-  int h_more = 1; 
+  int h_more = 1;
   int bboxcmp = 1;
   int tms_param_cnt = 1;
   int fav = -1;
@@ -481,7 +422,7 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
     }
     if (spun_out > 45) {
       goto CLOSE;
-    } 
+    }
     //else {
     //  qval = strtok(NULL, delims);
     //}
@@ -503,7 +444,7 @@ void read_cb(picoev_loop* loop, int fd, int revents, void* cb_arg)
   picoev_del(loop, fd);
   close(fd);
   free(client);
-  
+
 }
 
 void* start_thread(void* _unused)
