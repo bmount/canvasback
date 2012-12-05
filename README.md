@@ -1,26 +1,44 @@
-`canvasback` is a (we hope fast) endpoint for simple 2d mapping in html5 elements, minimal 
-enough to enable scrolling and zooming without pre-rendering images. The basic
-idea is to be like a geojson layer, but with binary arrays of geospatial geometries,
-which are often 1/10 the size of geojson and render really quickly. Most of 
-the work will be on the data and javascript sides but I want to test the 
-feasibility of this implementation of some of the basics.
+`canvasback` serves geometries for use in web maps. The basic
+idea is to be like a geojson vector layer, but with binary arrays of geospatial records,
+which can be less than 1/10 the size of geojson and render really quickly.
 
 ## the current master branch
 
-uses an experimental data format. For original Well-Known Binary implementation, see the `wellknownbinary` tag. This new thing (unknown binary?) is something like:
+uses an experimental data format. For original Well-Known Binary implementation, see the `wellknownbinary` tag. This new thing serves up an array of records like this:
 
 <pre>
 uint32 geometry_type // same as wkb
 uint32 num_pts // basically like wkb
 uint32 osm_type // based on highway taxonomy, not required, alternatively for things like building height
-uint8[num_pts] // wat
+int16[num_pts] // wat
 </pre>
 
-The last bit takes advantage of the fact that tile maps are so commonly 256 px
- wide, if you scale the geometry on the way out to be the offset from the tile
- origin for each tile, all your values will fit in a single byte, a coordinate
- pair in 2 bytes. This results in very small network requirements and is
- pretty inconsequential in terms of server resources. 
+Basically, a tile map service (google style) query of the form:
+
+`someurl/tms/z/x/y`
+
+returns an array of the above records, but the coordinates are
+pairs of 2 byte integer offsets from the tile origin (in all other ways,
+the format is basically [well-known binary (pdf spec)](http://portal.opengeospatial.org/files/?artifact_id=829)).
+
+Caveats to the approach in general are that you
+have to 1) use typical clippped tiles and/or 2) know in advance
+that your geometry won't be too big. 1 makes sense anyway and for 2, a primary use case
+for this is loading
+lots of building geometries where the query is done on centroids and ground
+area is [predictably scaled](http://en.wikipedia.org/wiki/List_of_largest_buildings_in_the_world).
+
+The advantage is speed and compactness, for example here is every unsimplified
+building in a good chunk of northeast San Francisco at zoom 16, which renders
+imperceptibly quick and averages 35k per tile (more realistic zoom levels are much smaller!):
+
+![](http://farm9.staticflickr.com/8490/8247298268_6286b0c33c_b.jpg)
+
+Here's every node and way in OSM SF at zoom level 13, at a size comparable to png:
+
+![](http://farm9.staticflickr.com/8210/8246255601_b2d2303d89_b.jpg)
+
+More demos etc forthcoming
 
 To use: edit `db.conf.c` with your database settings, adapt the
 queries in `canvasback.c` for your different zoom levels, then:
@@ -29,32 +47,13 @@ queries in `canvasback.c` for your different zoom levels, then:
 
 `./canvasback`
 
-Access the streaming binary things at: `http://localhost:7987/whatever/tms/Z/X/Y.someext`
+Access at: `http://localhost:7987/whatever/tms/Z/X/Y.someext`
 
 (any thing of the form `/tms/k/n/m` should work, but `tms` is required, ie `example.com/anything/who?tms=10,11,12`)
 
-***sample output***
+Dependencies: Postgres and PostGIS
 
-All San Francisco Streets:
-
-![san francisco streets](http://h.sfgeo.org/tmp/pics/osm_streets_padded_wkb.png)
-
-Copy of VECNIK New York Bic map in San Francisco:
-
-![vecnik style sf map](http://h.sfgeo.org/tmp/pics/comolosvizzualiteros.png)
-
-![canvasback
-example](http://h.sfgeo.org/tmp/pics/railways_canvasback.jpg)
-
-Sacramento River delta, Northern Contra Costa Co:
-![canvasback
-example](http://h.sfgeo.org/tmp/pics/delta_canvasback.jpg)
-
-Female canvasback duck with ducklings:
+Canvasback duck with ducklings:
 
 ![canvasback example](http://upload.wikimedia.org/wikipedia/commons/3/35/Aythya_valisineria2.jpg)
 
-A good source of bulk partial Open Street Map data is [Cloudmade](http://downloads.cloudmade.com/).
-`osm2pgsql` with lon-lat flag is what I use for examples.
-
-Dependencies: Postgres+PostGIS with development headers, gcc.
