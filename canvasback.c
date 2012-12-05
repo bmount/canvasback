@@ -101,31 +101,32 @@ typedef struct {
   picoev_loop* loop;
 } client_t;
 
-int16_t scale (double coord, int zoom, int tile) {
+int16_t scale (double coord, int zoom, int tile, int is_y) {
   return (int16_t)(
-      ((coord + 20037508.342789) * (1 << zoom) / 157156.928179 - (tile*255))*100);
+    //157156.928179) - 255*tile) -- resolution of 255px tiles for uint8 version
+    ((coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - ((tile)*256))*10);
 }
 
 void short_stream (client_t* client, double* coordbuf,
-        uint8_t* strm, int pt_count,
+        uint8_t* strm, int npts,
         int idx, int ngeoms, uint32_t geom_t, uint32_t osmtype) {
-  int i;
   int32_t tval;
   int32_t* tbuf = &tval;
   int16_t coordv;
   int16_t* coord = &coordv;
   *tbuf = geom_t;
   memcpy(&strm[(idx*4) + 12*ngeoms], tbuf, 4);
-  *tbuf = (uint32_t)pt_count;
+  *tbuf = (uint32_t)npts;
   memcpy(&strm[(idx*4) + 12*ngeoms + 4], tbuf, 4);
   *tbuf = osmtype;
   memcpy(&strm[(idx*4) + 12*ngeoms + 8], tbuf, 4);
-  for (i = 0; i < (4 * (pt_count)); i += 2) {
-    *coord = scale(coordbuf[i], client->tile.z, client->tile.x);
-    //printf("x: %d\n", coordv);
+  int i;
+  for (i = 0; i <= (2*(npts)); i += 2) {
+    *coord = scale(coordbuf[i], client->tile.z, client->tile.x, 0);
+    printf("x: %d\n", coordv);
     memcpy(&strm[i*2 + (idx*4) + 12 + 12*ngeoms], coord, 2);
-    *coord = (-1) * scale(coordbuf[i+1], client->tile.z, client->tile.y);
-    //printf("y: %d\n", coordv);
+    *coord = (-1) * scale(coordbuf[i+1], client->tile.z, client->tile.y, 1);
+    printf("y: %d\n", coordv);
     memcpy(&strm[i*2 + (idx*4) + 14 + 12*ngeoms], coord, 2);
   }
   //printf("chk: %d\n", (int16_t)3.22);
