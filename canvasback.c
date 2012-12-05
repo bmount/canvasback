@@ -125,7 +125,7 @@ void short_stream (client_t* client, double* coordbuf,
     *coord = scale(coordbuf[i], client->tile.z, client->tile.x, 0);
     printf("x: %d\n", coordv);
     memcpy(&strm[i*2 + (idx*4) + 12 + 12*ngeoms], coord, 2);
-    *coord = (-1) * scale(coordbuf[i+1], client->tile.z, client->tile.y, 1);
+    *coord = scale(coordbuf[i+1], client->tile.z, client->tile.y, 1);
     printf("y: %d\n", coordv);
     memcpy(&strm[i*2 + (idx*4) + 14 + 12*ngeoms], coord, 2);
   }
@@ -250,7 +250,7 @@ void tms2bbox (client_t* cli) {
   edge_err = (cli->tile.z >= 18)? .00001: .01;
   cli->bbox.x1 = (cli->tile.x * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + edge_err);
   cli->bbox.x2 = ((cli->tile.x + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - edge_err);
-  cli->bbox.y1 = ((cli->tile.y - 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + edge_err);
+  cli->bbox.y1 = ((cli->tile.y + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + edge_err);
   cli->bbox.y2 = ((cli->tile.y) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - edge_err);
   //printf("bbox %f %f %f %f \n", cli->bbox.x1, cli->bbox.y1, cli->bbox.x2, cli->bbox.y2);
   return;
