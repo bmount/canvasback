@@ -1,6 +1,8 @@
 `canvasback` serves geometries for use in web maps. The basic
 idea is to be like a geojson vector layer, but with binary arrays of geospatial records,
 which can be less than 1/10 the size of geojson and render really quickly.
+A client-side project to render them is available at http://github.com/bmount/wkmap -
+it uses a couple of the native binary data api's in current web browsers.
 
 ## the current master branch
 
@@ -8,12 +10,12 @@ uses an experimental data format. For original Well-Known Binary implementation,
 
 <pre>
 uint32 geometry_type // same as wkb
-uint32 num_pts // basically like wkb
+uint32 num_pts // like wkb
 uint32 osm_type // based on highway taxonomy, not required, alternatively for things like building height
 int16[num_pts] // wat
 </pre>
 
-Basically, a tile map service (google style) query of the form:
+A tile map service (google style) query of the form:
 
 `someurl/tms/z/x/y`
 
