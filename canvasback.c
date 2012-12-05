@@ -104,7 +104,7 @@ typedef struct {
 int16_t scale (double coord, int zoom, int tile, int is_y) {
   return (int16_t)(
     //157156.928179) - 255*tile) -- resolution of 255px tiles for uint8 version
-    ((coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - ((tile - is_y)*256))*10);
+    ((coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - ((tile - is_y)*256))* 100);
 }
 
 void short_stream (client_t* client, double* coordbuf,
