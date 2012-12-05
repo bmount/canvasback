@@ -104,7 +104,7 @@ typedef struct {
 int16_t scale (double coord, int zoom, int tile, int is_y) {
   return (int16_t)(
     //157156.928179) - 255*tile) -- resolution of 255px tiles for uint8 version
-    ((coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - ((tile)*256))*10);
+    ((coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - ((tile - is_y)*256))*10);
 }
 
 void short_stream (client_t* client, double* coordbuf,
@@ -123,10 +123,8 @@ void short_stream (client_t* client, double* coordbuf,
   int i;
   for (i = 0; i < (2*(npts)); i += 2) {
     *coord = scale(coordbuf[i], client->tile.z, client->tile.x, 0);
-    printf("x: %d\n", coordv);
     memcpy(&strm[i*2 + (idx*4) + 12 + 12*ngeoms], coord, 2);
     *coord = scale(coordbuf[i+1], client->tile.z, client->tile.y, 1);
-    printf("y: %d\n", coordv);
     memcpy(&strm[i*2 + (idx*4) + 14 + 12*ngeoms], coord, 2);
   }
   //printf("chk: %d\n", (int16_t)3.22);
@@ -250,7 +248,7 @@ void tms2bbox (client_t* cli) {
   edge_err = (cli->tile.z >= 18)? .00001: .01;
   cli->bbox.x1 = (cli->tile.x * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + edge_err);
   cli->bbox.x2 = ((cli->tile.x + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - edge_err);
-  cli->bbox.y1 = ((cli->tile.y + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + edge_err);
+  cli->bbox.y1 = ((cli->tile.y - 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + edge_err);
   cli->bbox.y2 = ((cli->tile.y) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - edge_err);
   //printf("bbox %f %f %f %f \n", cli->bbox.x1, cli->bbox.y1, cli->bbox.x2, cli->bbox.y2);
   return;
