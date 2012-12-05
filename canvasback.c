@@ -121,7 +121,7 @@ void short_stream (client_t* client, double* coordbuf,
   *tbuf = osmtype;
   memcpy(&strm[(idx*4) + 12*ngeoms + 8], tbuf, 4);
   int i;
-  for (i = 0; i <= (2*(npts)); i += 2) {
+  for (i = 0; i < (2*(npts)); i += 2) {
     *coord = scale(coordbuf[i], client->tile.z, client->tile.x, 0);
     printf("x: %d\n", coordv);
     memcpy(&strm[i*2 + (idx*4) + 12 + 12*ngeoms], coord, 2);
