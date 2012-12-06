@@ -25,6 +25,8 @@
 
 #define EARTH 6378137
 
+#define STREET_VIEW_ZOOM_MIN = 17
+
 unsigned short port = PORT;
 int listen_sock;
 
@@ -67,8 +69,9 @@ char simpmidz[600] = "select \
         limit 3000;";
 
 char streetz[600] = "select \
-        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), mercgeom)), \
-        round(height) \
+        st_asbinary(ST_MakeValid( \
+                ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), mercgeom))), \
+        round(height)::text \
         from sfbldgs where ctr && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
         limit 3000;";
@@ -135,7 +138,7 @@ void fmt_res_bin (client_t* client) {
   PGresult *res = PQgetResult(client->conn);
   uint8_t *strm;
   char *pqres;
-  char *osmt;
+  char *style;
   int s, r, c, num_rows, num_cols;
   num_rows = PQntuples(res);
   num_cols = PQnfields(res);
@@ -165,11 +168,17 @@ void fmt_res_bin (client_t* client) {
   uint32_t wkb_type;
   uint32_t linear_rings;
   double* coordv;
+  uint32_t stylenum;
   int total_linestrings = 0;
   for (r = 0; r < num_rows; r++) {
     geom_pos = 1;
     pqres = (char*)PQgetvalue(res, r, 0);
-    osmt = (char*)PQgetvalue(res, r, 1);
+    style = (char*)PQgetvalue(res, r, 1);
+    if (client->tile.z >= 17) {
+        stylenum = atoi(style);
+    } else {
+        stylenum = osmstylenum(style);
+    }
     reslen = PQgetlength(res, r, 0);
     while (geom_pos < reslen) {
       wkb_type = *(uint32_t*)(&(pqres[geom_pos]));
@@ -189,7 +198,7 @@ void fmt_res_bin (client_t* client) {
         coordv = (double*)(&pqres[geom_pos+8]);
         geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos + 4])) * 16 + 9);
         short_stream(client, coordv, strm, pts, pt_count, ngeoms, wkb_type,
-            osmstylenum(osmt));
+            stylenum);
         pt_count += pts;
         ngeoms++;
       }
@@ -203,7 +212,7 @@ void fmt_res_bin (client_t* client) {
           pts = (int)(*(uint32_t*)(&pqres[geom_pos]));
           coordv = (double*)(&pqres[geom_pos+4]);
           short_stream(client, coordv, strm, pts, pt_count, ngeoms, wkb_type,
-              5); // no reason not to style in osmstyles.h
+              stylenum); // no reason not to style in osmstyles.h
           pt_count += pts;
           geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos])) * 16 + 4);
           linear_rings--;
