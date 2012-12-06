@@ -68,9 +68,15 @@ char simpmidz[600] = "select \
         and highway is not null \
         limit 3000;";
 
+/*
+for a bunch of tight footprint geometries for use in a three.js extrusion, it's important
+not to have touching sequential vertices, so simplify appropriately on the way out
+
+*/
+
 char streetz[600] = "select \
-        st_asbinary(ST_MakeValid( \
-                ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), mercgeom))), \
+        st_asbinary(st_simplify(ST_MakeValid( \
+                ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), mercgeom)),.07)), \
         round(height)::text \
         from sfbldgs where ctr && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
