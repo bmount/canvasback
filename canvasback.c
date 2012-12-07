@@ -54,13 +54,24 @@ char lowz[600] = "select \
         limit 30000;";
 
 char midz[600] = "select \
+        st_asbinary(way), \
+        /* \
+        ---  st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
+        */ \
+        (10)::text \
+        from planet_osm_point where st_contains( \
+        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
+        , way) \
+        limit 300000;";
+
+char intersectionmidz[600] = "select \
         st_asbinary(ST_Intersection(st_envelope( \
           st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
-        highway \
-        from planet_osm_roads where way && \
+        1 \
+        from planet_osm_point where st_contains( \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
-        and highway is not null \
-        limit 3000;";
+        , way) \
+        where way is not null limit 3000;";
 
 char simpmidz[600] = "select \
         st_asbinary(st_simplify( \
@@ -148,7 +159,6 @@ void short_stream (client_t* client, double* coordbuf,
     *coord = scale(coordbuf[i+1], client->tile.z, client->tile.y, 1);
     memcpy(&strm[i*2 + (idx*4) + 14 + 12*ngeoms], coord, 2);
   }
-  //printf("chk: %d\n", (int16_t)3.22);
   return;
 }
 
@@ -200,18 +210,18 @@ void fmt_res_bin (client_t* client) {
       wkb_type = *(uint32_t*)(&(pqres[geom_pos]));
 
       if (wkb_type == 1) {
+        coordv = (double*)(&pqres[geom_pos+4]);
         geom_pos += 17;
-        coordv = (double*)(&pqres[geom_pos+8]);
         // TODO check, decide on style rules
-        short_stream(client, coordv, strm, 1, pt_count, 1, wkb_type, 10);
-        pt_count += 1;
+        short_stream(client, coordv, strm, 1, pt_count, ngeoms, wkb_type, 10);
+        pt_count++;
         ngeoms++;
       }
 
       else if (wkb_type == 2) {
         pts = (int)(*(uint32_t*)(&pqres[geom_pos+4]));
         coordv = (double*)(&pqres[geom_pos+8]);
-        geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos + 4])) * 16 + 9);
+        geom_pos += (pts * 16 + 9);
         short_stream(client, coordv, strm, pts, pt_count, ngeoms, wkb_type,
             stylenum);
         pt_count += pts;
@@ -221,7 +231,6 @@ void fmt_res_bin (client_t* client) {
       else if (wkb_type == 3) {
         //ngeoms++; leaving this here as reminder about stupid bugs
         linear_rings = *(uint32_t*)(&pqres[geom_pos + 4]);
-        //printf("%d linear rings\n", linear_rings);
         geom_pos += 8;
         while (linear_rings) {
           pts = (int)(*(uint32_t*)(&pqres[geom_pos]));
@@ -229,7 +238,7 @@ void fmt_res_bin (client_t* client) {
           short_stream(client, coordv, strm, pts, pt_count, ngeoms, wkb_type,
               stylenum); // no reason not to style in osmstyles.h
           pt_count += pts;
-          geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos])) * 16 + 4);
+          geom_pos += (pts * 16 + 4);
           linear_rings--;
           ngeoms++;
         }
@@ -274,7 +283,6 @@ void tms2bbox (client_t* cli) {
   cli->bbox.x2 = ((cli->tile.x + 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - edge_err);
   cli->bbox.y1 = ((cli->tile.y - 1) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 + edge_err);
   cli->bbox.y2 = ((cli->tile.y) * 40075016.6856 / (1 << cli->tile.z) - 20037508.34278 - edge_err);
-  //printf("bbox %f %f %f %f \n", cli->bbox.x1, cli->bbox.y1, cli->bbox.x2, cli->bbox.y2);
   return;
 }
 
@@ -299,7 +307,6 @@ void send_conn (client_t* client) {
     memcpy(tquery,streetz,600);
     //tquery = streetz;
   }
-  //char bbox_query[600];
   char* bbox_query = (char*)malloc(600);
   PGconn *conn;
   PostgresPollingStatusType status;
