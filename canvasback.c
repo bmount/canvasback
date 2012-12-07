@@ -93,16 +93,16 @@ a bit past tile edge (ie no need to clip building footprints)
 */
 
 char streetz[600] = "select \
-        st_asbinary(st_simplify(ST_MakeValid( \
-                        mercgeom), .07)), \
+        st_asbinary(st_makevalid(st_simplify( \
+                        mercgeom, .08))), \
         /* \
         --- ST_Intersection( \
         ---   st_envelope( \
-        ---     st_geomfromtext('linestring(%f %f,%f %f)', 900913)), mercgeom)),.07)), \
+        ---     st_geomfromtext('linestring(%f %f,%f %f)', 900913)), mercgeom)),.097)), \
         */ \
         round(height)::text \
-        from sfbldgs where ctr && \
-        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
+        from sfbldgs where st_within(ctr, \
+        st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913))) \
         limit 3000;";
 
 // and boundary is null and motorcar is null and route is null etc
@@ -136,7 +136,7 @@ typedef struct {
 int16_t scale (double coord, int zoom, int tile, int is_y) {
   return (int16_t)(
     //157156.928179) - 255*tile) -- resolution of 255px tiles for uint8 version
-    ((coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - ((tile - is_y)*256))* 100);
+    ((coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - ((tile - is_y)*256))* 10);
 }
 
 void short_stream (client_t* client, double* coordbuf,
