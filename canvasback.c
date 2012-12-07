@@ -32,12 +32,13 @@ int listen_sock;
 
 /*
    Working on binary branch, default behavior here. Use fmt_res_bin and db_bin_cb as callback.
-   Query should return wkb (postgis st_asbinary) as first column, and another integer
-   (ie osm type, height, some id) as second column.
+   Query should return wkb (postgis st_asbinary) as first column, and a char ptr
+   (ie osm type, or something like `select heightcolumn::text`, some id) as second column.
 */
 
 char highz[600] = "select \
-        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
+        st_asbinary(ST_Intersection(st_envelope( \
+          st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
         highway \
         from planet_osm_line where way && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
@@ -45,14 +46,16 @@ char highz[600] = "select \
         limit 30000;";
 
 char lowz[600] = "select \
-        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), wkb_geometry)), \
+        st_asbinary(ST_Intersection(st_envelope( \
+          st_geomfromtext('linestring(%f %f,%f %f)', 900913)), wkb_geometry)), \
         1 \
         from ne_10m_coastline where wkb_geometry && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
         limit 30000;";
 
 char midz[600] = "select \
-        st_asbinary(ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
+        st_asbinary(ST_Intersection(st_envelope( \
+          st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way)), \
         highway \
         from planet_osm_roads where way && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
@@ -61,7 +64,8 @@ char midz[600] = "select \
 
 char simpmidz[600] = "select \
         st_asbinary(st_simplify( \
-            ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way), .01)), \
+          ST_Intersection(st_envelope( \
+            st_geomfromtext('linestring(%f %f,%f %f)', 900913)), way), .01)), \
         highway \
         from planet_osm_roads where way && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
@@ -72,11 +76,19 @@ char simpmidz[600] = "select \
 for a bunch of tight footprint geometries for use in a three.js extrusion, it's important
 not to have touching sequential vertices, so simplify appropriately on the way out
 
+commenting out the clipping intersection because query formatting expects 2 bboxes
+but indexing on centroid for known small geometries (buildings) allows extending
+a bit past tile edge (ie no need to clip building footprints)
 */
 
 char streetz[600] = "select \
         st_asbinary(st_simplify(ST_MakeValid( \
-                ST_Intersection(st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)), mercgeom)),.07)), \
+                        mercgeom), .07)), \
+        /* \
+        --- ST_Intersection( \
+        ---   st_envelope( \
+        ---     st_geomfromtext('linestring(%f %f,%f %f)', 900913)), mercgeom)),.07)), \
+        */ \
         round(height)::text \
         from sfbldgs where ctr && \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
@@ -168,14 +180,12 @@ void fmt_res_bin (client_t* client) {
   int pt_count = 0;
   int geom_pos = 1; // skip first endianness flag
   int reslen;
-  int idx = 1;
   int pts = 0;
   int ngeoms = 0;
   uint32_t wkb_type;
   uint32_t linear_rings;
   double* coordv;
   uint32_t stylenum;
-  int total_linestrings = 0;
   for (r = 0; r < num_rows; r++) {
     geom_pos = 1;
     pqres = (char*)PQgetvalue(res, r, 0);
@@ -190,16 +200,15 @@ void fmt_res_bin (client_t* client) {
       wkb_type = *(uint32_t*)(&(pqres[geom_pos]));
 
       if (wkb_type == 1) {
-        idx = 17;
-        geom_pos += idx;
-        pts = 1;
-        pt_count += pts;
-        //short_stream(client, (double*)(&pqres[geom_pos]), strm, pts, 0, 0, wkb_type);
+        geom_pos += 17;
+        coordv = (double*)(&pqres[geom_pos+8]);
+        // TODO check, decide on style rules
+        short_stream(client, coordv, strm, 1, pt_count, 1, wkb_type, 10);
+        pt_count += 1;
         ngeoms++;
       }
 
       else if (wkb_type == 2) {
-        total_linestrings++;
         pts = (int)(*(uint32_t*)(&pqres[geom_pos+4]));
         coordv = (double*)(&pqres[geom_pos+8]);
         geom_pos += (int)((*(uint32_t*)(&pqres[geom_pos + 4])) * 16 + 9);
