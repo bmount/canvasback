@@ -133,10 +133,10 @@ typedef struct {
   picoev_loop* loop;
 } client_t;
 
-int16_t scale (double coord, int zoom, int tile, int is_y) {
+int16_t scale (double coord, int zoom, int tile) {
   return (int16_t)(
     //157156.928179) - 255*tile) -- resolution of 255px tiles for uint8 version
-    ((coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - ((tile - is_y)*256))* 10);
+    ((coord + 20037508.342789) * (1 << zoom) / 156543.033928041 - ((tile)*256))* 10);
 }
 
 void short_stream (client_t* client, double* coordbuf,
@@ -154,9 +154,9 @@ void short_stream (client_t* client, double* coordbuf,
   memcpy(&strm[(idx*4) + 12*ngeoms + 8], tbuf, 4);
   int i;
   for (i = 0; i < (2*(npts)); i += 2) {
-    *coord = scale(coordbuf[i], client->tile.z, client->tile.x, 0);
+    *coord = scale(coordbuf[i], client->tile.z, client->tile.x);
     memcpy(&strm[i*2 + (idx*4) + 12 + 12*ngeoms], coord, 2);
-    *coord = scale(coordbuf[i+1], client->tile.z, client->tile.y, 1);
+    *coord = scale(coordbuf[i+1], client->tile.z, client->tile.y);
     memcpy(&strm[i*2 + (idx*4) + 14 + 12*ngeoms], coord, 2);
   }
   return;
