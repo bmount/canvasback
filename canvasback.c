@@ -62,7 +62,7 @@ char midz[600] = "select \
         from planet_osm_point where st_contains( \
         st_envelope(st_geomfromtext('linestring(%f %f,%f %f)', 900913)) \
         , way) \
-        limit 300000;";
+        limit 3000;";
 
 char intersectionmidz[600] = "select \
         st_asbinary(ST_Intersection(st_envelope( \
@@ -291,16 +291,16 @@ void send_conn (client_t* client) {
   // insufficient understanding of when pointing to string v copying is necessary
   //char* tquery;
   char *tquery = (char*)malloc(600);
-  if (client->tile.z < 9) {
+  if (client->tile.z < 11) {
     //tquery = lowz;
     memcpy(tquery,lowz,600);
   }
-  else if (client->tile.z < 9) {
+  else if (client->tile.z < 13) {
     memcpy(tquery,simpmidz,600);
-  } else if (client->tile.z < 13) {
+  } else if (client->tile.z < -1) { // skip points for now
     //tquery = midz;
     memcpy(tquery,midz,600);
-  } else if (client->tile.z < 16) {
+  } else if (client->tile.z < 18) {
     //tquery = highz;
     memcpy(tquery,highz,600);
   } else {
